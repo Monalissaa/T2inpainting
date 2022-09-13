@@ -56,9 +56,9 @@ def main(config: OmegaConf):
         elif config.new_params.from_cwd:
             checkpoint_path = config.new_params.from_cwd_path
         elif config.new_params.celeba:
-            checkpoint_path = '/home/mona/codes/lama/experiments/lama-fourier/models/best.ckpt'
+            checkpoint_path = os.environ.get('TORCH_HOME')+'/experiments/lama-fourier/models/best.ckpt'
         else:
-            checkpoint_path = '/home/mona/codes/lama/experiments/big-lama-with-discr/models/best.ckpt'
+            checkpoint_path = os.environ.get('TORCH_HOME')+'/experiments/big-lama-with-discr/models/best.ckpt'
 
         if config.new_params.from_scratch:
             training_model = make_training_model(config)

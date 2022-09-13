@@ -14,7 +14,8 @@
 
 python3 bin/train.py -cn lama-celebahq_full_config_cat_random_seed2.yaml
 
-#bash run_predict.sh
+bash p40_run_predict.sh
 
+echo "go go go" | mail -s "p40-run-lama_transfer_cat_100_random_seed2-completed!" 937315849@qq.com
 
 
