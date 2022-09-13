@@ -25,7 +25,9 @@ from saicinpainting.utils import register_debug_signal_handlers, handle_ddp_subp
     handle_deterministic_config
 
 LOGGER = logging.getLogger(__name__)
-
+import torch
+import numpy as np
+import random
 def seed_everything(seed):
     torch.manual_seed(seed) # Current CPU
     torch.cuda.manual_seed(seed) # Current GPU

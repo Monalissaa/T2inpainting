@@ -1,5 +1,5 @@
 
-mv /home/mona/pytorch_code/lama-under-limited-data/outputs/2022-09-13/20-40-39 /home/mona/pytorch_code/lama-under-limited-data/experiments/lama-fourier-afhq_train256_cat_100_transfer_random_seed2/
+mv /home/mona/pytorch_code/lama-under-limited-data/outputs/2022-09-13/21-22-05 /home/mona/pytorch_code/lama-under-limited-data/experiments/lama-fourier-afhq_train256_cat_100_transfer_random_seed2/
 
 bash outputs/lama-fourier-afhq_train256_cat_100_transfer_random_seed2/predict\&metric.sh
 
