@@ -26,6 +26,15 @@ from saicinpainting.utils import register_debug_signal_handlers, handle_ddp_subp
 
 LOGGER = logging.getLogger(__name__)
 
+def seed_everything(seed):
+    torch.manual_seed(seed) # Current CPU
+    torch.cuda.manual_seed(seed) # Current GPU
+    np.random.seed(seed) # Numpy module
+    random.seed(seed) # Python random module
+    torch.backends.cudnn.benchmark = False # Close optimization
+    torch.backends.cudnn.deterministic = True # Close optimization
+    torch.cuda.manual_seed_all(seed) # All GPU (Optional)
+
 @handle_ddp_subprocess()
 @hydra.main(config_path='../configs/training', config_name='tiny_test.yaml')
 def main(config: OmegaConf):
@@ -47,6 +56,9 @@ def main(config: OmegaConf):
         # there is no need to suppress this logger in ddp, because it handles rank on its own
         metrics_logger = TensorBoardLogger(config.location.tb_dir, name=os.path.basename(os.getcwd()))
         metrics_logger.log_hyperparams(config)
+
+        if config.new_params.seed>0:
+            seed_everything(config.new_params.seed)
 
         # training_model = make_training_model(config)
         # checkpoint_path = '/home/mona/codes/lama/experiments/celeb_hq_all_256_lama_from_scratch/mona_2022-01-11_11-09-25_train_lama-fourier-celeba_/models/best.ckpt'

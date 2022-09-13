@@ -168,3 +168,4 @@ new_params:
   wave_ffl_loss: 0
   fix_middleBlocks_convl2l_convg2l: false
   fix_middleBlocks_convl2l_convg2l_convl2g: false
+  seed: 2
