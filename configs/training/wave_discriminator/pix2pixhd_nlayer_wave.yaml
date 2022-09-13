@@ -1,0 +1,5 @@
+# @package _group_
+kind: wave
+input_nc: 3
+ndf: 64
+n_layers: 4

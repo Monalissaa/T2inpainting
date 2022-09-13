@@ -14,6 +14,7 @@ from models.ade20k import SegmentationModule, NUM_CLASS, segm_options
 from .fid.inception import InceptionV3
 from .lpips import PerceptualLoss
 from .ssim import SSIM
+from .psnr import PSNR
 
 LOGGER = logging.getLogger(__name__)
 
@@ -108,6 +109,19 @@ class LPIPSScore(PairwiseScore):
         super().__init__()
         self.score = PerceptualLoss(model=model, net=net, model_path=model_path,
                                     use_gpu=use_gpu, spatial=False).eval()
+        self.reset()
+
+    def forward(self, pred_batch, target_batch, mask=None):
+        batch_values = self.score(pred_batch, target_batch).flatten()
+        self.individual_values = np.hstack([
+            self.individual_values, batch_values.detach().cpu().numpy()
+        ])
+        return batch_values
+
+class PSNRScore(PairwiseScore):
+    def __init__(self, peak=255.):
+        super().__init__()
+        self.score = PSNR(peak=peak).eval()
         self.reset()
 
     def forward(self, pred_batch, target_batch, mask=None):

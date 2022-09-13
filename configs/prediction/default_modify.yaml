@@ -1,0 +1,17 @@
+indir: /home/mona/codes/lama/datasets/val256crop_100/withMask/random_thick_256  # to be overriden in CLI
+outdir: /home/mona/codes/lama/outputs/big-lama-transfer/inner_features  # to be overriden in CLI
+
+model:
+  path: /home/mona/codes/lama/experiments/big-lama-with-discr  # to be overriden in CLI
+  checkpoint: best.ckpt
+
+dataset:
+  kind: default
+  img_suffix: .png
+  pad_out_to_modulo: 8
+
+device: cuda
+out_key: inpainted
+levels: [1, 2,4,6,8,10,12,14,16,18,20,22,23,26,29,32,35]
+hole_radius: 60
+slice_channels: false

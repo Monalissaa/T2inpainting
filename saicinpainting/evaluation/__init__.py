@@ -3,10 +3,9 @@ import logging
 import torch
 
 from saicinpainting.evaluation.evaluator import InpaintingEvaluatorOnline, ssim_fid100_f1, lpips_fid100_f1
-from saicinpainting.evaluation.losses.base_loss import SSIMScore, LPIPSScore, FIDScore
+from saicinpainting.evaluation.losses.base_loss import SSIMScore, LPIPSScore, FIDScore, PSNRScore
 
-
-def make_evaluator(kind='default', ssim=True, lpips=True, fid=True, integral_kind=None, **kwargs):
+def make_evaluator(kind='default', ssim=True, lpips=True, fid=True, psnr=False, integral_kind=None, **kwargs):
     logging.info(f'Make evaluator {kind}')
     device = "cuda" if torch.cuda.is_available() else "cpu"
     metrics = {}
@@ -16,6 +15,8 @@ def make_evaluator(kind='default', ssim=True, lpips=True, fid=True, integral_kin
         metrics['lpips'] = LPIPSScore()
     if fid:
         metrics['fid'] = FIDScore().to(device)
+    if psnr:
+        metrics['psnr'] = PSNRScore()
         
     if integral_kind is None:
         integral_func = None

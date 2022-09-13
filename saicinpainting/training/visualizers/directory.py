@@ -10,7 +10,7 @@ from saicinpainting.utils import check_and_warn_input_range
 class DirectoryVisualizer(BaseVisualizer):
     DEFAULT_KEY_ORDER = 'image predicted_image inpainted'.split(' ')
 
-    def __init__(self, outdir, key_order=DEFAULT_KEY_ORDER, max_items_in_batch=10,
+    def __init__(self, outdir, key_order=DEFAULT_KEY_ORDER, max_items_in_batch=16,
                  last_without_mask=True, rescale_keys=None):
         self.outdir = outdir
         os.makedirs(self.outdir, exist_ok=True)
@@ -19,7 +19,7 @@ class DirectoryVisualizer(BaseVisualizer):
         self.last_without_mask = last_without_mask
         self.rescale_keys = rescale_keys
 
-    def __call__(self, epoch_i, batch_i, batch, suffix='', rank=None):
+    def __call__(self, epoch_i, batch_i, batch, suffix='', visualizer_html=None, rank=None):
         check_and_warn_input_range(batch['image'], 0, 1, 'DirectoryVisualizer target image')
         vis_img = visualize_mask_and_images_batch(batch, self.key_order, max_items=self.max_items_in_batch,
                                                   last_without_mask=self.last_without_mask,
@@ -31,6 +31,7 @@ class DirectoryVisualizer(BaseVisualizer):
         os.makedirs(curoutdir, exist_ok=True)
         rank_suffix = f'_r{rank}' if rank is not None else ''
         out_fname = os.path.join(curoutdir, f'batch{batch_i:07d}{rank_suffix}.jpg')
-
+        if visualizer_html is not None:
+            visualizer_html.set_cell(row_idx=int(batch_i/(visualizer_html.num_cols)), col_idx=int(batch_i%(visualizer_html.num_cols)), image=vis_img)
         vis_img = cv2.cvtColor(vis_img, cv2.COLOR_RGB2BGR)
         cv2.imwrite(out_fname, vis_img)

@@ -196,7 +196,9 @@ class InpaintingEvaluatorOnline(nn.Module):
         self.groups = np.array(self.groups)
 
         results = {}
+
         for score_name, score in self.scores.items():
+            print(score_name)
             LOGGER.info(f'Getting value of {score_name}')
             cur_states = [s[score_name] for s in states] if states is not None else None
             total_results, group_results = score.get_value(groups=self.groups, states=cur_states)

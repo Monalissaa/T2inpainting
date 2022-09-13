@@ -1,0 +1,5 @@
+# @package _group_
+data_root_dir: /home/mona/pytorch_code/lama/datasets/afhq/train/
+out_root_dir: /home/mona/pytorch_code/lama/experiments/afhq_train_all_256_test/
+tb_dir: /home/mona/pytorch_code/lama/tb_logs/afhq_train_all_256_test/
+pretrained_models: /home/mona/pytorch_code/lama/pretrained/

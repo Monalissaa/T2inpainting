@@ -103,6 +103,7 @@ class NonSaturatingWithR1(BaseAdversarialLoss):
                        mask=None) \
             -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         fake_loss = F.softplus(-discr_fake_pred)
+
         if (self.mask_as_fake_target and self.extra_mask_weight_for_gen > 0) or \
                 not self.use_unmasked_for_gen:  # == if masked region should be treated differently
             mask = self.interpolate_mask(mask, discr_fake_pred.shape[-2:])

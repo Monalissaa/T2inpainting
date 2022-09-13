@@ -1,0 +1,5 @@
+# @package _group_
+data_root_dir: /home/mona/codes/lama/datasets/afhq/train/train256_cat
+out_root_dir: /home/mona/codes/lama/experiments/lama-fourier-afhq_train256_cat_100_transfer_DH/
+tb_dir: /home/mona/codes/lama/tb_logs/lama-fourier-afhq_train256_cat_100_transfer_DH/
+pretrained_models: /home/mona/codes/lama/

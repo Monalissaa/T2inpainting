@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.fft
 
 from saicinpainting.training.modules.base import get_activation, BaseDiscriminator
 from saicinpainting.training.modules.spatial_transform import LearnableSpatialTransformWrapper
@@ -298,7 +299,9 @@ class ConcatTupleLayer(nn.Module):
         x_l, x_g = x
         assert torch.is_tensor(x_l) or torch.is_tensor(x_g)
         if not torch.is_tensor(x_g):
-            return x_l
+            return
+        # print(torch.cat(x, dim=1).shape)
+        # exit(0)
         return torch.cat(x, dim=1)
 
 
@@ -364,7 +367,644 @@ class FFCResNetGenerator(nn.Module):
         self.model = nn.Sequential(*model)
 
     def forward(self, input):
+        # # print(input.shape)
+        # remove_number = 0
+        # remove_start, remove_end = 13-remove_number, 14
+        # for number, single_model in enumerate(self.model):
+        #     if number>remove_start and  number<remove_end:
+        #         continue
+        #     # print(number, single_model)
+        #     input = single_model(input)
+            
+        #     # if isinstance(input, torch.Tensor):
+        #     #     print(torch.tensor(input).shape)
+        #     # else: # type is tuple
+        #     #     if isinstance(input[0], torch.Tensor):
+        #     #         print(input[0].shape, end=' ')
+        #     #     if isinstance(input[1], torch.Tensor):
+        #     #         print(input[1].shape, end=' ')
+        #     #     print('')
+        #     #     # print(type(input[0]), type(input[1]))
+        #     #     # [print(len(a)) for a in input]
+        # return input
         return self.model(input)
+
+class FFCResNetGeneratorDropout(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d,
+                 padding_type='reflect', activation_layer=nn.ReLU,
+                 up_norm_layer=nn.BatchNorm2d, up_activation=nn.ReLU(True),
+                 init_conv_kwargs={}, downsample_conv_kwargs={}, resnet_conv_kwargs={},
+                 spatial_transform_layers=None, spatial_transform_kwargs={},
+                 add_out_act=True, max_features=1024, out_ffc=False, out_ffc_kwargs={},
+                 p_dropout=0):
+        assert (n_blocks >= 0)
+        super().__init__()
+
+        model = [nn.ReflectionPad2d(3),
+                 FFC_BN_ACT(input_nc, ngf, kernel_size=7, padding=0, norm_layer=norm_layer,
+                            activation_layer=activation_layer, **init_conv_kwargs)]
+
+        ### downsample
+        for i in range(n_downsampling):
+            mult = 2 ** i
+            if i == n_downsampling - 1:
+                cur_conv_kwargs = dict(downsample_conv_kwargs)
+                cur_conv_kwargs['ratio_gout'] = resnet_conv_kwargs.get('ratio_gin', 0)
+            else:
+                cur_conv_kwargs = downsample_conv_kwargs
+            model += [FFC_BN_ACT(min(max_features, ngf * mult),
+                                 min(max_features, ngf * mult * 2),
+                                 kernel_size=3, stride=2, padding=1,
+                                 norm_layer=norm_layer,
+                                 activation_layer=activation_layer,
+                                 **cur_conv_kwargs)]
+
+        mult = 2 ** n_downsampling
+        feats_num_bottleneck = min(max_features, ngf * mult)
+
+        ### resnet blocks
+        for i in range(n_blocks):
+            cur_resblock = FFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            model += [cur_resblock]
+
+        model += [ConcatTupleLayer()]
+
+        ### upsample
+        for i in range(n_downsampling):
+            mult = 2 ** (n_downsampling - i)
+            model += [nn.ConvTranspose2d(min(max_features, ngf * mult),
+                                         min(max_features, int(ngf * mult / 2)),
+                                         kernel_size=3, stride=2, padding=1, output_padding=1),
+                      up_norm_layer(min(max_features, int(ngf * mult / 2))),
+                      up_activation]
+
+        if out_ffc:
+            model += [FFCResnetBlock(ngf, padding_type=padding_type, activation_layer=activation_layer,
+                                     norm_layer=norm_layer, inline=True, **out_ffc_kwargs)]
+
+        model += [nn.ReflectionPad2d(3),
+                  nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        if add_out_act:
+            model.append(get_activation('tanh' if add_out_act is True else add_out_act))
+        self.model = nn.Sequential(*model)
+        self.dropout = nn.Dropout(p = p_dropout)
+
+    def forward(self, input):
+        for block in self.model[:5]:
+            input = block(input)
+        input = self.model[5](input)
+        input = (self.dropout(input[0]), self.dropout(input[1]))
+        # for block in self.model[5:-13]:
+        #     input = block(input)
+        #     input = (self.dropout(input[0]), self.dropout(input[1]))
+
+        for block in self.model[6:]:
+            input = block(input)
+        return input
+
+class FFCResNetGeneratorSmall(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d,
+                 padding_type='reflect', activation_layer=nn.ReLU,
+                 up_norm_layer=nn.BatchNorm2d, up_activation=nn.ReLU(True),
+                 init_conv_kwargs={}, downsample_conv_kwargs={}, resnet_conv_kwargs={},
+                 spatial_transform_layers=None, spatial_transform_kwargs={},
+                 add_out_act=True, max_features=1024, out_ffc=False, out_ffc_kwargs={},
+                 n_blocks_small = 3):
+        assert (n_blocks >= 0)
+        super().__init__()
+
+        model = [nn.ReflectionPad2d(3),
+                 FFC_BN_ACT(input_nc, ngf, kernel_size=7, padding=0, norm_layer=norm_layer,
+                            activation_layer=activation_layer, **init_conv_kwargs)]
+
+        ### downsample
+        for i in range(n_downsampling):
+            mult = 2 ** i
+            if i == n_downsampling - 1:
+                cur_conv_kwargs = dict(downsample_conv_kwargs)
+                cur_conv_kwargs['ratio_gout'] = resnet_conv_kwargs.get('ratio_gin', 0)
+            else:
+                cur_conv_kwargs = downsample_conv_kwargs
+            model += [FFC_BN_ACT(min(max_features, ngf * mult),
+                                 min(max_features, ngf * mult * 2),
+                                 kernel_size=3, stride=2, padding=1,
+                                 norm_layer=norm_layer,
+                                 activation_layer=activation_layer,
+                                 **cur_conv_kwargs)]
+
+        mult = 2 ** n_downsampling
+        feats_num_bottleneck = min(max_features, ngf * mult)
+
+        ### resnet blocks
+        for i in range(n_blocks):
+            cur_resblock = FFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            model += [cur_resblock]
+
+        model += [ConcatTupleLayer()]
+
+        ### upsample
+        for i in range(n_downsampling):
+            mult = 2 ** (n_downsampling - i)
+            model += [nn.ConvTranspose2d(min(max_features, ngf * mult),
+                                         min(max_features, int(ngf * mult / 2)),
+                                         kernel_size=3, stride=2, padding=1, output_padding=1),
+                      up_norm_layer(min(max_features, int(ngf * mult / 2))),
+                      up_activation]
+
+        if out_ffc:
+            model += [FFCResnetBlock(ngf, padding_type=padding_type, activation_layer=activation_layer,
+                                     norm_layer=norm_layer, inline=True, **out_ffc_kwargs)]
+
+        model += [nn.ReflectionPad2d(3),
+                  nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        if add_out_act:
+            model.append(get_activation('tanh' if add_out_act is True else add_out_act))
+        self.model = nn.Sequential(*model)
+
+        small_model = [nn.ReflectionPad2d(3),
+                 FFC_BN_ACT(input_nc, ngf, kernel_size=7, padding=0, norm_layer=norm_layer,
+                            activation_layer=activation_layer, **init_conv_kwargs)]
+
+        ### downsample
+        for i in range(n_downsampling):
+            mult = 2 ** i
+            if i == n_downsampling - 1:
+                cur_conv_kwargs = dict(downsample_conv_kwargs)
+                cur_conv_kwargs['ratio_gout'] = resnet_conv_kwargs.get('ratio_gin', 0)
+            else:
+                cur_conv_kwargs = downsample_conv_kwargs
+            small_model += [FFC_BN_ACT(min(max_features, ngf * mult),
+                                 min(max_features, ngf * mult * 2),
+                                 kernel_size=3, stride=2, padding=1,
+                                 norm_layer=norm_layer,
+                                 activation_layer=activation_layer,
+                                 **cur_conv_kwargs)]
+
+        mult = 2 ** n_downsampling
+        feats_num_bottleneck = min(max_features, ngf * mult)
+
+        ### resnet blocks
+        for i in range(n_blocks_small):
+            cur_resblock = FFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            small_model += [cur_resblock]
+
+        small_model += [ConcatTupleLayer()]
+
+        ### upsample
+        for i in range(n_downsampling):
+            mult = 2 ** (n_downsampling - i)
+            small_model += [nn.ConvTranspose2d(min(max_features, ngf * mult),
+                                         min(max_features, int(ngf * mult / 2)),
+                                         kernel_size=3, stride=2, padding=1, output_padding=1),
+                      up_norm_layer(min(max_features, int(ngf * mult / 2))),
+                      up_activation]
+
+        if out_ffc:
+            small_model += [FFCResnetBlock(ngf, padding_type=padding_type, activation_layer=activation_layer,
+                                     norm_layer=norm_layer, inline=True, **out_ffc_kwargs)]
+
+        small_model += [nn.ReflectionPad2d(3),
+                  nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        if add_out_act:
+            small_model.append(get_activation('tanh' if add_out_act is True else add_out_act))
+        self.small_model = nn.Sequential(*small_model)
+
+
+    def forward(self, input, training):
+        if training:
+            input_small = input
+
+            for block in self.model[:-13]:
+                input = block(input)
+            acti_model = self.model[-13](input)
+
+            for block in self.small_model[:-13]:
+                input_small = block(input_small)
+            input_small = self.small_model[-13](input_small)
+            acti_small_model = input_small
+            for block in self.small_model[-12:]:
+                input_small = block(input_small)
+
+            return acti_model, acti_small_model, input_small
+            
+        else:
+            return self.small_model(input)
+
+class FFCResNetGeneratorMaxChangeAdd(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d,
+                 padding_type='reflect', activation_layer=nn.ReLU,
+                 up_norm_layer=nn.BatchNorm2d, up_activation=nn.ReLU(True),
+                 init_conv_kwargs={}, downsample_conv_kwargs={}, resnet_conv_kwargs={},
+                 spatial_transform_layers=None, spatial_transform_kwargs={},
+                 add_out_act=True, max_features=1024, out_ffc=False, out_ffc_kwargs={}):
+        assert (n_blocks >= 0)
+        super().__init__()
+
+        model = [nn.ReflectionPad2d(3),
+                 FFC_BN_ACT(input_nc, ngf, kernel_size=7, padding=0, norm_layer=norm_layer,
+                            activation_layer=activation_layer, **init_conv_kwargs)]
+
+        ### downsample
+        for i in range(n_downsampling):
+            mult = 2 ** i
+            if i == n_downsampling - 1:
+                cur_conv_kwargs = dict(downsample_conv_kwargs)
+                cur_conv_kwargs['ratio_gout'] = resnet_conv_kwargs.get('ratio_gin', 0)
+            else:
+                cur_conv_kwargs = downsample_conv_kwargs
+            model += [FFC_BN_ACT(min(max_features, ngf * mult),
+                                 min(max_features, ngf * mult * 2),
+                                 kernel_size=3, stride=2, padding=1,
+                                 norm_layer=norm_layer,
+                                 activation_layer=activation_layer,
+                                 **cur_conv_kwargs)]
+
+        mult = 2 ** n_downsampling
+        feats_num_bottleneck = min(max_features, ngf * mult)
+
+        ### resnet blocks
+        for i in range(n_blocks):
+            cur_resblock = FFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            model += [cur_resblock]
+
+        max_change_blocks = []
+        ###  resnet blocks
+        for i in range(3):
+            cur_resblock = FFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            max_change_blocks += [cur_resblock]
+        self.max_change_blocks = nn.Sequential(*max_change_blocks)
+
+        model += [ConcatTupleLayer()]
+
+        ### upsample
+        for i in range(n_downsampling):
+            mult = 2 ** (n_downsampling - i)
+            model += [nn.ConvTranspose2d(min(max_features, ngf * mult),
+                                         min(max_features, int(ngf * mult / 2)),
+                                         kernel_size=3, stride=2, padding=1, output_padding=1),
+                      up_norm_layer(min(max_features, int(ngf * mult / 2))),
+                      up_activation]
+
+        if out_ffc:
+            model += [FFCResnetBlock(ngf, padding_type=padding_type, activation_layer=activation_layer,
+                                     norm_layer=norm_layer, inline=True, **out_ffc_kwargs)]
+
+        model += [nn.ReflectionPad2d(3),
+                  nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        if add_out_act:
+            model.append(get_activation('tanh' if add_out_act is True else add_out_act))
+        self.model = nn.Sequential(*model)
+
+    def forward(self, input):
+        
+        for block in self.model[:5]:
+            input = block(input)
+        
+        input = self.model[5](self.max_change_blocks[0](input))
+
+        for block in self.model[6:20]:
+            input = block(input)
+        
+        input = self.model[20](self.max_change_blocks[1](input))
+        input = self.model[21](input)
+        input = self.model[22](self.max_change_blocks[2](input))
+
+        for block in self.model[23:]:
+            input = block(input)
+
+        return input
+
+
+class FFCResNetGeneratorSimpleAdd(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d,
+                 padding_type='reflect', activation_layer=nn.ReLU,
+                 up_norm_layer=nn.BatchNorm2d, up_activation=nn.ReLU(True),
+                 init_conv_kwargs={}, downsample_conv_kwargs={}, resnet_conv_kwargs={},
+                 spatial_transform_layers=None, spatial_transform_kwargs={},
+                 add_out_act=True, max_features=1024, out_ffc=False, out_ffc_kwargs={}):
+        assert (n_blocks >= 0)
+        super().__init__()
+
+        model = [nn.ReflectionPad2d(3),
+                 FFC_BN_ACT(input_nc, ngf, kernel_size=7, padding=0, norm_layer=norm_layer,
+                            activation_layer=activation_layer, **init_conv_kwargs)]
+
+        ### downsample
+        for i in range(n_downsampling):
+            mult = 2 ** i
+            if i == n_downsampling - 1:
+                cur_conv_kwargs = dict(downsample_conv_kwargs)
+                cur_conv_kwargs['ratio_gout'] = resnet_conv_kwargs.get('ratio_gin', 0)
+            else:
+                cur_conv_kwargs = downsample_conv_kwargs
+            model += [FFC_BN_ACT(min(max_features, ngf * mult),
+                                 min(max_features, ngf * mult * 2),
+                                 kernel_size=3, stride=2, padding=1,
+                                 norm_layer=norm_layer,
+                                 activation_layer=activation_layer,
+                                 **cur_conv_kwargs)]
+
+        mult = 2 ** n_downsampling
+        feats_num_bottleneck = min(max_features, ngf * mult)
+
+        ### resnet blocks
+        for i in range(n_blocks):
+            cur_resblock = FFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            model += [cur_resblock]
+
+        pretrained_blocks = []
+        ###  resnet blocks
+        for i in range(n_blocks):
+            cur_resblock = FFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            pretrained_blocks += [cur_resblock]
+        self.pretrained_blocks = nn.Sequential(*pretrained_blocks)
+
+        model += [ConcatTupleLayer()]
+
+        ### upsample
+        for i in range(n_downsampling):
+            mult = 2 ** (n_downsampling - i)
+            model += [nn.ConvTranspose2d(min(max_features, ngf * mult),
+                                         min(max_features, int(ngf * mult / 2)),
+                                         kernel_size=3, stride=2, padding=1, output_padding=1),
+                      up_norm_layer(min(max_features, int(ngf * mult / 2))),
+                      up_activation]
+
+        if out_ffc:
+            model += [FFCResnetBlock(ngf, padding_type=padding_type, activation_layer=activation_layer,
+                                     norm_layer=norm_layer, inline=True, **out_ffc_kwargs)]
+
+        model += [nn.ReflectionPad2d(3),
+                  nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        if add_out_act:
+            model.append(get_activation('tanh' if add_out_act is True else add_out_act))
+        self.model = nn.Sequential(*model)
+
+    def forward(self, input):
+        
+        for block in self.model[:5]:
+            input = block(input)
+        
+        for block_finetune, blcok_pretrain in zip(self.model[5:-13], self.pretrained_blocks):
+            input = block_finetune(blcok_pretrain(input))
+            
+        for block in self.model[-13:]:
+            input = block(input)
+        return input
+
+
+class FFCResNetGeneratorSpottune(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d,
+                 padding_type='reflect', activation_layer=nn.ReLU,
+                 up_norm_layer=nn.BatchNorm2d, up_activation=nn.ReLU(True),
+                 init_conv_kwargs={}, downsample_conv_kwargs={}, resnet_conv_kwargs={},
+                 spatial_transform_layers=None, spatial_transform_kwargs={},
+                 add_out_act=True, max_features=1024, out_ffc=False, out_ffc_kwargs={}):
+        assert (n_blocks >= 0)
+        super().__init__()
+
+        model = [nn.ReflectionPad2d(3),
+                 FFC_BN_ACT(input_nc, ngf, kernel_size=7, padding=0, norm_layer=norm_layer,
+                            activation_layer=activation_layer, **init_conv_kwargs)]
+
+        ### downsample
+        for i in range(n_downsampling):
+            mult = 2 ** i
+            if i == n_downsampling - 1:
+                cur_conv_kwargs = dict(downsample_conv_kwargs)
+                cur_conv_kwargs['ratio_gout'] = resnet_conv_kwargs.get('ratio_gin', 0)
+            else:
+                cur_conv_kwargs = downsample_conv_kwargs
+            model += [FFC_BN_ACT(min(max_features, ngf * mult),
+                                 min(max_features, ngf * mult * 2),
+                                 kernel_size=3, stride=2, padding=1,
+                                 norm_layer=norm_layer,
+                                 activation_layer=activation_layer,
+                                 **cur_conv_kwargs)]
+
+        mult = 2 ** n_downsampling
+        feats_num_bottleneck = min(max_features, ngf * mult)
+
+        ### resnet blocks
+        for i in range(n_blocks):
+            cur_resblock = FFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            model += [cur_resblock]
+
+        pretrained_blocks = []
+        ###  resnet blocks
+        for i in range(n_blocks):
+            cur_resblock = FFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            pretrained_blocks += [cur_resblock]
+        self.pretrained_blocks = nn.Sequential(*pretrained_blocks)
+
+        model += [ConcatTupleLayer()]
+
+        ### upsample
+        for i in range(n_downsampling):
+            mult = 2 ** (n_downsampling - i)
+            model += [nn.ConvTranspose2d(min(max_features, ngf * mult),
+                                         min(max_features, int(ngf * mult / 2)),
+                                         kernel_size=3, stride=2, padding=1, output_padding=1),
+                      up_norm_layer(min(max_features, int(ngf * mult / 2))),
+                      up_activation]
+
+        if out_ffc:
+            model += [FFCResnetBlock(ngf, padding_type=padding_type, activation_layer=activation_layer,
+                                     norm_layer=norm_layer, inline=True, **out_ffc_kwargs)]
+
+        model += [nn.ReflectionPad2d(3),
+                  nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        if add_out_act:
+            model.append(get_activation('tanh' if add_out_act is True else add_out_act))
+        self.model = nn.Sequential(*model)
+
+    def forward(self, input, policy=None):
+        if policy is not None:
+            t = 0
+            for block in self.model[:5]:
+                input = block(input)
+            
+            for block_finetune, blcok_pretrain in zip(self.model[5:-13], self.pretrained_blocks):
+                action = policy[:,t].contiguous()
+                action_mask = action.float().view(-1,1,1,1)
+
+                output = block_finetune(input)
+                output_pretrain = blcok_pretrain(input)
+
+                input = (output[0]*(1-action_mask) + output_pretrain[0]*action_mask, 
+                    output[1]*(1-action_mask) + output_pretrain[1]*action_mask)
+                t += 1
+
+            for block in self.model[-13:]:
+                input = block(input)
+            return input
+        else:
+            return self.model(input)
+
+
+class FFCResNetGeneratorSecondStage(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, alpha=0, norm_layer=nn.BatchNorm2d,
+                 padding_type='reflect', activation_layer=nn.ReLU,
+                 up_norm_layer=nn.BatchNorm2d, up_activation=nn.ReLU(True),
+                 init_conv_kwargs={}, downsample_conv_kwargs={}, resnet_conv_kwargs={},
+                 spatial_transform_layers=None, spatial_transform_kwargs={},
+                 add_out_act=True, max_features=1024, out_ffc=False, out_ffc_kwargs={}):
+        assert (n_blocks >= 0)
+        super().__init__()
+
+        self.alpha = alpha # for fade in
+
+        # --------------------------  first stage model ------------------------------
+        # --------------------------  f     s     model ------------------------------
+        fs_model = [nn.ReflectionPad2d(3),
+                 FFC_BN_ACT(input_nc, ngf, kernel_size=7, padding=0, norm_layer=norm_layer,
+                            activation_layer=activation_layer, **init_conv_kwargs)]
+
+        ### downsample
+        for i in range(n_downsampling):
+            mult = 2 ** i
+            if i == n_downsampling - 1:
+                cur_conv_kwargs = dict(downsample_conv_kwargs)
+                cur_conv_kwargs['ratio_gout'] = resnet_conv_kwargs.get('ratio_gin', 0)
+            else:
+                cur_conv_kwargs = downsample_conv_kwargs
+            fs_model += [FFC_BN_ACT(min(max_features, ngf * mult),
+                                 min(max_features, ngf * mult * 2),
+                                 kernel_size=3, stride=2, padding=1,
+                                 norm_layer=norm_layer,
+                                 activation_layer=activation_layer,
+                                 **cur_conv_kwargs)]
+
+        mult = 2 ** n_downsampling
+        feats_num_bottleneck = min(max_features, ngf * mult)
+
+        ### resnet blocks
+        for i in range(n_blocks):
+            cur_resblock = FFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            fs_model += [cur_resblock]
+
+        fs_model += [ConcatTupleLayer()]
+
+        ### upsample
+        for i in range(n_downsampling):
+            mult = 2 ** (n_downsampling - i)
+            fs_model += [nn.ConvTranspose2d(min(max_features, ngf * mult),
+                                         min(max_features, int(ngf * mult / 2)),
+                                         kernel_size=3, stride=2, padding=1, output_padding=1),
+                      up_norm_layer(min(max_features, int(ngf * mult / 2))),
+                      up_activation]
+
+        if out_ffc:
+            fs_model += [FFCResnetBlock(ngf, padding_type=padding_type, activation_layer=activation_layer,
+                                     norm_layer=norm_layer, inline=True, **out_ffc_kwargs)]
+
+        fs_model += [nn.ReflectionPad2d(3),
+                  nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        if add_out_act:
+            fs_model.append(get_activation('tanh' if add_out_act is True else add_out_act))
+        self.fs_model = nn.Sequential(*fs_model)
+
+        # --------------------------  second stage model ------------------------------
+
+        model = [nn.ReflectionPad2d(3),
+                 FFC_BN_ACT(input_nc, ngf, kernel_size=7, padding=0, norm_layer=norm_layer,
+                            activation_layer=activation_layer, **init_conv_kwargs)]
+
+        ### downsample
+        for i in range(n_downsampling):
+            mult = 2 ** i
+            if i == n_downsampling - 1:
+                cur_conv_kwargs = dict(downsample_conv_kwargs)
+                cur_conv_kwargs['ratio_gout'] = resnet_conv_kwargs.get('ratio_gin', 0)
+            else:
+                cur_conv_kwargs = downsample_conv_kwargs
+            model += [FFC_BN_ACT(min(max_features, ngf * mult),
+                                 min(max_features, ngf * mult * 2),
+                                 kernel_size=3, stride=2, padding=1,
+                                 norm_layer=norm_layer,
+                                 activation_layer=activation_layer,
+                                 **cur_conv_kwargs)]
+
+        mult = 2 ** n_downsampling
+        feats_num_bottleneck = min(max_features, ngf * mult)
+
+        ### resnet blocks
+        for i in range(n_blocks):
+            cur_resblock = FFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            model += [cur_resblock]
+
+        model += [ConcatTupleLayer()]
+
+        ### upsample
+        for i in range(n_downsampling):
+            mult = 2 ** (n_downsampling - i)
+            model += [nn.ConvTranspose2d(min(max_features, ngf * mult),
+                                         min(max_features, int(ngf * mult / 2)),
+                                         kernel_size=3, stride=2, padding=1, output_padding=1),
+                      up_norm_layer(min(max_features, int(ngf * mult / 2))),
+                      up_activation]
+
+        if out_ffc:
+            model += [FFCResnetBlock(ngf, padding_type=padding_type, activation_layer=activation_layer,
+                                     norm_layer=norm_layer, inline=True, **out_ffc_kwargs)]
+
+        model += [nn.ReflectionPad2d(3),
+                  nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        if add_out_act:
+            model.append(get_activation('tanh' if add_out_act is True else add_out_act))
+        self.model = nn.Sequential(*model)
+
+    def forward(self, input, input_with_no_mask):
+        if self.alpha == 0:
+            return self.fs_model(input_with_no_mask)
+        elif self.alpha>0 and self.alpha<1:
+            fade_number = [14]
+            for number, (fs_block, model_block) in enumerate(zip(self.fs_model, self.model)):
+                # print(number, (fs_block, model_block))
+                input_with_no_mask = fs_block(input_with_no_mask)
+                input = model_block(input)
+                if number in fade_number:
+                    input = self.alpha * input + (1 - self.alpha) * input_with_no_mask
+            return input
+        elif self.alpha==1:
+            return self.model(input)
+        else:
+            raise ValueError('alpha must >0 or <1')
+
+        # return self.model(input)
 
 
 class FFCNLayerDiscriminator(BaseDiscriminator):

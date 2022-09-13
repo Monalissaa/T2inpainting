@@ -1,0 +1,5 @@
+# @package _group_
+data_root_dir: /home/mona/pytorch_code/lama/datasets/celeba-hq-dataset/
+out_root_dir: /home/mona/pytorch_code/lama/experiments/
+tb_dir: /home/mona/pytorch_code/lama/tb_logs/
+pretrained_models: /home/mona/pytorch_code/lama/

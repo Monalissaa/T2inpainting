@@ -135,3 +135,34 @@ dmypy.json
 .vscode/
 ## vim
 *.sw?
+
+# .pth?
+ade20k/ade20k-resnet50dilated-ppm_deepsup/encoder_epoch_20.pth
+pretrained/
+
+# datasets
+/datasets/afhq/
+/datasets/focal_pictures/
+/datasets/ukiyoe/
+/datasets/val256crop/
+/datasets/val256crop_100/
+/datasets/wave_pictures/
+datasets/afhq_cat100.zip
+datasets/filelist.txt
+datasets/filelist.txt.xz
+datasets/ukiyoe-1024-v2.tar
+datasets/ukiyoe-1024-v2.tar:Zone.Identifier
+datasets/afhq_20220913.zip
+
+
+# experiments
+experiments/
+
+# outputs
+outputs/
+
+# tb_logs
+tb_logs/
+
+# hub
+hub/

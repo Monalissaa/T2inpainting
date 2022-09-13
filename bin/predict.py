@@ -11,6 +11,8 @@ import os
 import sys
 import traceback
 
+sys.path.append("/home/mona/pytorch_code/lama")
+
 from saicinpainting.evaluation.utils import move_to_device
 
 os.environ['OMP_NUM_THREADS'] = '1'
@@ -32,6 +34,8 @@ from saicinpainting.training.data.datasets import make_default_val_dataset
 from saicinpainting.training.trainers import load_checkpoint
 from saicinpainting.utils import register_debug_signal_handlers
 
+from saicinpainting.training.visualizers.visualizer import HtmlPageVisualizer 
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -41,7 +45,6 @@ def main(predict_config: OmegaConf):
         register_debug_signal_handlers()  # kill -10 <pid> will result in traceback dumped into log
 
         device = torch.device(predict_config.device)
-
         train_config_path = os.path.join(predict_config.model.path, 'config.yaml')
         with open(train_config_path, 'r') as f:
             train_config = OmegaConf.create(yaml.safe_load(f))
@@ -49,19 +52,24 @@ def main(predict_config: OmegaConf):
         train_config.training_model.predict_only = True
         train_config.visualizer.kind = 'noop'
 
-        out_ext = predict_config.get('out_ext', '.png')
-
+        out_ext = predict_config.get('out_ext', '.jpg')
         checkpoint_path = os.path.join(predict_config.model.path, 
                                        'models', 
                                        predict_config.model.checkpoint)
+
+        if train_config.new_params.two_stage:
+            train_config.generator.alpha = 1
         model = load_checkpoint(train_config, checkpoint_path, strict=False, map_location='cpu')
         model.freeze()
         model.to(device)
+        model.eval()
 
         if not predict_config.indir.endswith('/'):
             predict_config.indir += '/'
 
         dataset = make_default_val_dataset(predict_config.indir, **predict_config.dataset)
+        visualizer_html = HtmlPageVisualizer(num_rows=int((len(dataset)+5)/5), num_cols = 5)
+
         with torch.no_grad():
             for img_i in tqdm.trange(len(dataset)):
                 mask_fname = dataset.mask_filenames[img_i]
@@ -74,11 +82,16 @@ def main(predict_config: OmegaConf):
                 batch = move_to_device(default_collate([dataset[img_i]]), device)
                 batch['mask'] = (batch['mask'] > 0) * 1
                 batch = model(batch)
+
                 cur_res = batch[predict_config.out_key][0].permute(1, 2, 0).detach().cpu().numpy()
 
                 cur_res = np.clip(cur_res * 255, 0, 255).astype('uint8')
+                visualizer_html.set_cell(row_idx=int(img_i/(visualizer_html.num_cols)), col_idx=int(img_i%(visualizer_html.num_cols)), image=cur_res)
                 cur_res = cv2.cvtColor(cur_res, cv2.COLOR_RGB2BGR)
+                
+                
                 cv2.imwrite(cur_out_fname, cur_res)
+        visualizer_html.save(f'{predict_config.outdir}/predict_results.html')
     except KeyboardInterrupt:
         LOGGER.warning('Interrupted by user')
     except Exception as ex:

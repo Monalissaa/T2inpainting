@@ -1,0 +1,42 @@
+python3 bin/predict.py \
+model.path=$(pwd)/experiments/celeb_hq_all_256_lama_from_scratch/mona_2022-01-11_11-09-25_train_lama-fourier-celeba_/ \
+indir=$(pwd)/datasets/celeba-hq-dataset/visual_test_256/random_thin_256/ \
+outdir=$(pwd)/outputs/celeba_random_thin_256_from_scratch
+
+python -m pytorch_fid /home/mona/pytorch_code/lama/datasets/celeba-hq-dataset/visual_test_source_256 /home/mona/pytorch_code/lama/outputs/celeba_random_thick_256
+
+
+python3 bin/evaluate_predicts.py \
+$(pwd)/configs/eval2_gpu.yaml \
+$(pwd)/datasets/celeba-hq-dataset/visual_test_256/random_thin_256/ \
+$(pwd)/outputs/celeba_random_thin_256_from_scratch \
+$(pwd)/outputs/celeba_random_thin_256_from_scratch_metrics.csv
+
+
+python3 bin/predict.py \
+model.path=$(pwd)/checkpoints/LaMa_models/lama-celeba-hq/lama-fourier/ \
+indir=$(pwd)/datasets/ffhq-256/test_last1k_mask20%40%_random1k/ \
+outdir=$(pwd)/outputs/ffhq_256_last1k_mask20%40%_random1k
+
+python3 bin/evaluate_predicts.py \
+$(pwd)/configs/eval2_gpu.yaml \
+$(pwd)/datasets/ffhq-256/test_last1k_mask20%40%_random1k/ \
+$(pwd)/outputs/ffhq_256_last1k_mask20%40%_random1k \
+$(pwd)/outputs/ffhq_256_last1k_mask20%40%_random1k_metrics.csv
+
+python3 bin/predict.py \
+model.path=$(pwd)/experiments/afhq_train_all_256_transfer/mona_2022-01-13_16-12-29_train_lama-fourier-afhq_train_all_256_transfer_ \
+indir=$(pwd)/datasets/afhq/test/test_256/random_thick_256/ \
+outdir=$(pwd)/outputs/lama-fourier-afhq_train256_cat_100_from_scratch/afhq_train_all_256_transfer
+
+python3 bin/evaluate_predicts.py \
+$(pwd)/configs/eval2_gpu.yaml \
+$(pwd)/datasets/afhq/test/test_256/random_thick_256/ \
+$(pwd)/outputs/afhq_train_all_256_transfer \
+$(pwd)/outputs/afhq_train_all_256_transfer_metrics.csv
+
+need to modify file:
+    configs/training/lama-fourier-afhq_train_all_256_from_scratch.yaml
+    configs/training/location/afhq_train_all_256.yaml
+    configs/training/data/abl-04-256-mh-dist-afhq-all.yaml
+    configs/training/trainer/

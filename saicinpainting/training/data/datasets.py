@@ -1,3 +1,4 @@
+import imp
 import glob
 import logging
 import os
@@ -18,6 +19,9 @@ from saicinpainting.evaluation.data import InpaintingDataset as InpaintingEvalua
     OurInpaintingDataset as OurInpaintingEvaluationDataset, ceil_modulo, InpaintingEvalOnlineDataset
 from saicinpainting.training.data.aug import IAAAffine2, IAAPerspective2
 from saicinpainting.training.data.masks import get_mask_generator
+
+from torchvision import transforms
+from saicinpainting.training.modules import loader
 
 LOGGER = logging.getLogger(__name__)
 
@@ -43,6 +47,76 @@ class InpaintingTrainDataset(Dataset):
         self.iter_i += 1
         return dict(image=img,
                     mask=mask)
+
+class InpaintingContrastTrainDataset(Dataset):
+    def __init__(self, indir, mask_generator, transform):
+        self.in_files = list(glob.glob(os.path.join(indir, '**', '*.jpg'), recursive=True))
+        self.mask_generator = mask_generator
+        self.transform = transform
+        self.iter_i = 0
+        # # MoCo v2's aug: similar to SimCLR https://arxiv.org/abs/2002.05709
+        # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+        #                                  std=[0.229, 0.224, 0.225])
+        # augmentation = [
+        #     transforms.ToPILImage(),
+        #     transforms.RandomResizedCrop(256, scale=(0.2, 1.)),
+        #     transforms.RandomApply([
+        #         transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)  # not strengthened
+        #     ], p=0.8),
+        #     transforms.RandomGrayscale(p=0.2),
+        #     transforms.RandomApply([loader.GaussianBlur([.1, 2.])], p=0.5),
+        #     transforms.RandomHorizontalFlip(),
+        #     transforms.ToTensor(),
+        #     # normalize
+        # ]
+
+        # self.mocov2transform = transforms.Compose(augmentation)
+
+    def __len__(self):
+        return len(self.in_files)
+
+    def __getitem__(self, item):
+        path = self.in_files[item]
+        img = cv2.imread(path)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        # toPIL = transforms.ToPILImage()
+        # pic_img = toPIL(img)
+        # if not os.path.exists('/home/mona/codes/lama/img1.jpg'):
+        #     pic_img.save('/home/mona/codes/lama/img1.jpg')
+        img1 = self.transform(image=img)['image']
+        img1 = np.transpose(img1, (2, 0, 1))
+        # print(img1.shape)
+        # TODO: maybe generate mask before augmentations? slower, but better for segmentation-based masks
+        mask1 = self.mask_generator(img1, iter_i=self.iter_i)
+
+        # # img2 = self.mocov2transform(img).numpy()  # img1 is numpy
+        # img2 = self.transform(image=img)['image']
+        # img2 = np.transpose(img2, (2, 0, 1))
+        # # pic_img_aug = toPIL(img2)
+        # # if not os.path.exists('/home/mona/codes/lama/img2.jpg'):
+        # #     pic_img_aug.save('/home/mona/codes/lama/img2.jpg')
+
+        # TODO: maybe generate mask before augmentations? slower, but better for segmentation-based masks
+        mask2 = self.mask_generator(img1, iter_i=self.iter_i)
+
+    
+        # mask1 = torch.cat((torch.from_numpy(mask1), torch.from_numpy(mask1), torch.from_numpy(mask1)), dim=0)
+        # mask2 = torch.cat((torch.from_numpy(mask2), torch.from_numpy(mask2), torch.from_numpy(mask2)), dim=0)
+
+        # pic_q = toPIL(mask1)
+        # pic_k = toPIL(mask2)
+        # if not os.path.exists('/home/mona/codes/lama/pic_q.jpg'):
+        #     pic_q.save('/home/mona/codes/lama/pic_q.jpg')
+        # if not os.path.exists('/home/mona/codes/lama/pic_k.jpg'):
+        #     pic_k.save('/home/mona/codes/lama/pic_k.jpg')
+        
+
+        self.iter_i += 1
+        return dict(image=img1,
+                    mask=mask1,
+                    # image_key=img2,
+                    mask_key=mask2)
 
 
 class InpaintingTrainWebDataset(IterableDataset):
@@ -194,6 +268,11 @@ def get_transforms(transform_variant, out_size):
             A.HueSaturationValue(hue_shift_limit=5, sat_shift_limit=30, val_shift_limit=5),
             A.ToFloat()
         ])
+    elif transform_variant == 'horizontal_flip':
+        transform = A.Compose([
+            A.HorizontalFlip(),
+            A.ToFloat()
+        ])
     elif transform_variant == 'no_augs':
         transform = A.Compose([
             A.ToFloat()
@@ -225,6 +304,11 @@ def make_default_train_dataloader(indir, kind='default', out_size=512, mask_gen_
                                          mask_generator=mask_generator,
                                          transform=transform,
                                          out_size=out_size,
+                                         **kwargs)
+    elif kind == 'contrast':
+        dataset = InpaintingContrastTrainDataset(indir=indir,
+                                         mask_generator=mask_generator,
+                                         transform=transform,
                                          **kwargs)
     else:
         raise ValueError(f'Unknown train dataset kind {kind}')
@@ -282,7 +366,6 @@ def make_default_val_dataset(indir, kind='default', out_size=512, transform_vari
 
 def make_default_val_dataloader(*args, dataloader_kwargs=None, **kwargs):
     dataset = make_default_val_dataset(*args, **kwargs)
-
     if dataloader_kwargs is None:
         dataloader_kwargs = {}
     dataloader = DataLoader(dataset, **dataloader_kwargs)

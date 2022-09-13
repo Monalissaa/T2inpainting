@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import imp
 import logging
 import os
 import sys
@@ -17,13 +18,13 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.plugins import DDPPlugin
+from saicinpainting.training.trainers import load_checkpoint
 
 from saicinpainting.training.trainers import make_training_model
 from saicinpainting.utils import register_debug_signal_handlers, handle_ddp_subprocess, handle_ddp_parent_process, \
     handle_deterministic_config
 
 LOGGER = logging.getLogger(__name__)
-
 
 @handle_ddp_subprocess()
 @hydra.main(config_path='../configs/training', config_name='tiny_test.yaml')
@@ -47,12 +48,27 @@ def main(config: OmegaConf):
         metrics_logger = TensorBoardLogger(config.location.tb_dir, name=os.path.basename(os.getcwd()))
         metrics_logger.log_hyperparams(config)
 
-        training_model = make_training_model(config)
+        # training_model = make_training_model(config)
+        # checkpoint_path = '/home/mona/codes/lama/experiments/celeb_hq_all_256_lama_from_scratch/mona_2022-01-11_11-09-25_train_lama-fourier-celeba_/models/best.ckpt'
+        # checkpoint_path = '/home/mona/codes/lama/experiments/big-lama-transfer-reInitUp/10-36-13/models/best.ckpt'
+        if config.new_params.two_stage_from_init:
+            checkpoint_path = config.new_params.resume_from_checkpoint
+        elif config.new_params.from_cwd:
+            checkpoint_path = config.new_params.from_cwd_path
+        elif config.new_params.celeba:
+            checkpoint_path = '/home/mona/codes/lama/experiments/lama-fourier/models/best.ckpt'
+        else:
+            checkpoint_path = '/home/mona/codes/lama/experiments/big-lama-with-discr/models/best.ckpt'
+
+        if config.new_params.from_scratch:
+            training_model = make_training_model(config)
+        else:
+            training_model = load_checkpoint(config, checkpoint_path)
 
         trainer_kwargs = OmegaConf.to_container(config.trainer.kwargs, resolve=True)
         if need_set_deterministic:
             trainer_kwargs['deterministic'] = True
-
+        
         trainer = Trainer(
             # there is no need to suppress checkpointing in ddp, because it handles rank on its own
             callbacks=ModelCheckpoint(dirpath=checkpoints_dir, **config.trainer.checkpoint_kwargs),
@@ -60,6 +76,7 @@ def main(config: OmegaConf):
             default_root_dir=os.getcwd(),
             **trainer_kwargs
         )
+
         trainer.fit(training_model)
     except KeyboardInterrupt:
         LOGGER.warning('Interrupted by user')
