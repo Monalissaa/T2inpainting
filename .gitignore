@@ -147,12 +147,11 @@ pretrained/
 /datasets/val256crop/
 /datasets/val256crop_100/
 /datasets/wave_pictures/
-datasets/afhq_cat100.zip
 datasets/filelist.txt
 datasets/filelist.txt.xz
 datasets/ukiyoe-1024-v2.tar
 datasets/ukiyoe-1024-v2.tar:Zone.Identifier
-datasets/afhq_20220913.zip
+datasets/*.zip
 
 
 # experiments

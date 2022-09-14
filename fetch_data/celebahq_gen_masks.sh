@@ -85,18 +85,40 @@
 
 python3 bin/gen_mask_dataset.py \
 $(pwd)/configs/data_gen/random_thick_256.yaml \
+datasets/afhq/train/train256_wild/train256_wild_100_random_seed2/val256_cat_500_source/ \
+datasets/afhq/train/train256_wild/train256_wild_100_random_seed2/val/random_thick_256/ \
+2
+
+python3 bin/gen_mask_dataset.py \
+$(pwd)/configs/data_gen/random_thin_256.yaml \
+datasets/afhq/train/train256_wild/train256_wild_100_random_seed2/val256_cat_500_source/ \
+datasets/afhq/train/train256_wild/train256_wild_100_random_seed2/val/random_thin_256/ \
+2
+
+python3 bin/gen_mask_dataset.py \
+$(pwd)/configs/data_gen/random_medium_256.yaml \
+datasets/afhq/train/train256_wild/train256_wild_100_random_seed2/val256_cat_500_source/ \
+datasets/afhq/train/train256_wild/train256_wild_100_random_seed2/val/random_medium_256/ \
+2
+
+
+python3 bin/gen_mask_dataset.py \
+$(pwd)/configs/data_gen/random_thick_256.yaml \
 datasets/afhq/train/train256_wild/train256_wild_100_random_seed3/val256_cat_500_source/ \
-datasets/afhq/train/train256_wild/train256_wild_100_random_seed3/val/random_thick_256/
+datasets/afhq/train/train256_wild/train256_wild_100_random_seed3/val/random_thick_256/ \
+3
 
 python3 bin/gen_mask_dataset.py \
 $(pwd)/configs/data_gen/random_thin_256.yaml \
 datasets/afhq/train/train256_wild/train256_wild_100_random_seed3/val256_cat_500_source/ \
-datasets/afhq/train/train256_wild/train256_wild_100_random_seed3/val/random_thin_256/
+datasets/afhq/train/train256_wild/train256_wild_100_random_seed3/val/random_thin_256/ \
+3
 
 python3 bin/gen_mask_dataset.py \
 $(pwd)/configs/data_gen/random_medium_256.yaml \
 datasets/afhq/train/train256_wild/train256_wild_100_random_seed3/val256_cat_500_source/ \
-datasets/afhq/train/train256_wild/train256_wild_100_random_seed3/val/random_medium_256/
+datasets/afhq/train/train256_wild/train256_wild_100_random_seed3/val/random_medium_256/ \
+3
 
 # python3 bin/gen_mask_dataset.py \
 # $(pwd)/configs/data_gen/train_mask_large.yaml \

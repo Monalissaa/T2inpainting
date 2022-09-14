@@ -17,7 +17,7 @@ losses:
     mask_as_fake_target: true
     allow_scale_mask: true
   feature_matching:
-    weight: 100
+    weight: 0
   segm_pl:
     weight: 30
     weights_path: ${env:TORCH_HOME}
@@ -41,15 +41,15 @@ visualizer:
   kind: directory
   outdir: samples
 location:
-  data_root_dir: /home/mona/codes/lama/datasets/afhq/train/train256_wild
-  out_root_dir: /home/mona/codes/lama/experiments/lama-fourier-afhq_train256_wild_100_transfer_aug/
-  tb_dir: /home/mona/codes/lama/tb_logs/lama-fourier-afhq_train256_wild_100_transfer_aug/
+  data_root_dir: /home/mona/codes/lama/datasets/ukiyoe/ukiyoe-256
+  out_root_dir: /home/mona/codes/lama/experiments/lama-fourier-afhq_train256_ukiyoe_100_transfer_aug_fix_middleBlocks_convl2l_convg2l_fix_UpDown_without_featureMatching_loss_stage_two_aug_no_fix_without_featureMatching_loss/
+  tb_dir: /home/mona/codes/lama/tb_logs/lama-fourier-afhq_train256_ukiyoe_100_transfer_aug_fix_middleBlocks_convl2l_convg2l_fix_UpDown_without_featureMatching_loss_stage_two_aug_no_fix_without_featureMatching_loss/
 data:
   batch_size: 16
   val_batch_size: 4
   num_workers: 4
   train:
-    indir: ${location.data_root_dir}/train256_wild_100
+    indir: ${location.data_root_dir}/train256_ukiyoe_100
     out_size: 256
     mask_gen_kwargs:
       irregular_proba: 1
@@ -73,7 +73,7 @@ data:
       shuffle: true
       num_workers: ${data.num_workers}
   val:
-    indir: ${location.data_root_dir}/val256_wild_500
+    indir: ${location.data_root_dir}/val256_ukiyoe_500
     img_suffix: .png
     dataloader_kwargs:
       batch_size: ${data.val_batch_size}
@@ -150,8 +150,8 @@ new_params:
   randomInitOnlyUp: false
   randomInitDown: false
   randomInitUniform: false
-  two_stage_from_init: false
-  resume_from_checkpoint: /home/mona/codes/lama/outputs/2022-09-12/05-51-26/models/last.ckpt
+  two_stage_from_init: true
+  resume_from_checkpoint: /mnt/d/post/codes/lama/experiment/lama-transfer-ukiyoe-aug_fix_middleBlocks_convl2l_convg2l_fix_UpDown_without_featureMatching_loss/08-15-41/models/model0.ckpt
   CWD: 0
   temperature: 0.5
   resume_from_transferred: /home/mona/codes/lama/experiments/big-lama-transfer/models/best.ckpt

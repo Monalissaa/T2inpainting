@@ -13,6 +13,18 @@ from saicinpainting.evaluation.masks.mask import SegmentationMask, propose_rando
 from saicinpainting.evaluation.utils import load_yaml, SmallMode
 from saicinpainting.training.data.masks import MixedMaskGenerator
 
+import torch
+# import numpy as np
+import random
+def seed_everything(seed):
+    torch.manual_seed(seed) # Current CPU
+    torch.cuda.manual_seed(seed) # Current GPU
+    np.random.seed(seed) # Numpy module
+    random.seed(seed) # Python random module
+    torch.backends.cudnn.benchmark = False # Close optimization
+    torch.backends.cudnn.deterministic = True # Close optimization
+    torch.cuda.manual_seed_all(seed) # All GPU (Optional)
+
 
 class MakeManyMasksWrapper:
     def __init__(self, impl, variants_n=2):
@@ -98,6 +110,8 @@ def process_images(src_images, indir, outdir, config):
 
 
 def main(args):
+    if args.seed > 0:
+        seed_everything(args.seed)
     if not args.indir.endswith('/'):
         args.indir += '/'
 
@@ -124,6 +138,7 @@ if __name__ == '__main__':
     aparser.add_argument('config', type=str, help='Path to config for dataset generation')
     aparser.add_argument('indir', type=str, help='Path to folder with images')
     aparser.add_argument('outdir', type=str, help='Path to folder to store aligned images and masks to')
+    aparser.add_argument('seed', type=int, default=0, help='the seed need to be fixed')
     aparser.add_argument('--n-jobs', type=int, default=0, help='How many processes to use')
     aparser.add_argument('--ext', type=str, default='jpg', help='Input image extension')
 
