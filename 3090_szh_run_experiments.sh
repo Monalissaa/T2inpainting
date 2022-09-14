@@ -12,10 +12,16 @@
 
 # bash run_predict.sh
 
-python3 bin/train.py -cn lama-celebahq_full_config_dog_random_seed2.yaml
+python3 bin/train.py -cn lama-celebahq_full_config_dog_random_seed2_aug_from_scratch
 
 bash 3090_szh_run_predict.sh
 
-echo "go go go" | mail -s "3090_szh-run-lama_transfer_dog_100_random_seed2-completed!" 937315849@qq.com
+echo "go go go" | mail -s "3090_szh-run-lama_transfer_dog_100_random_seed2_aug_from_scratch-completed!" 937315849@qq.com
+
+python3 bin/train.py -cn lama-celebahq_full_config_dog_random_seed2_aug
+
+bash 3090_szh_run_predict.sh
+
+echo "go go go" | mail -s "3090_szh-run-lama_transfer_dog_100_random_seed2_aug_from_scratch-completed!" 937315849@qq.com
 
 

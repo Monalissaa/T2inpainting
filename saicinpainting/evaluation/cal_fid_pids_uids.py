@@ -181,40 +181,50 @@ def calculate_metrics(folder1, folder2):
 
     return fid, pids, uids
 
+import argparse
 
 if __name__ == '__main__':
     folder1 = 'path to the inpainted result'
     folder2 = 'path to the gt'
 
-    output_name = 'lama-transfer-wild-aug_fix_middleBlocks_convl2l_convg2l_fix_UpDown_without_featureMatching_loss_stage_two_aug_no_fix_without_featureMatching_loss'
-    cat_test_real_256 = '/home/mona/codes/lama/datasets/afhq/test_origin/wild'
-    cat_test_real_256_for_thick = '/home/mona/codes/lama/datasets/afhq/test_origin/wild_for_thick'
-    model_name = 'model0'
 
-    # -------------- for thin mask -------------
-    inpainted_img_path = f'/home/mona/codes/lama/outputs/{output_name}/{model_name}_random_thin_256'
-    folder1, folder2 = inpainted_img_path, cat_test_real_256
+    aparser = argparse.ArgumentParser()
+    aparser.add_argument('--output_name', type=str, help='the dir name in outputs')
+    aparser.add_argument('--kind', type=str, help='the dir name in outputs')
+    args = aparser.parse_args()
 
-    fid, pids, uids = calculate_metrics(folder1, folder2)
-    print('fid: %.4f, pids: %.4f, uids: %.4f' % (fid, pids, uids))
-    with open(f'/home/mona/codes/lama/outputs/{output_name}/{model_name}_thin_fid_pids_uids.txt', 'w') as f:
-        f.write('fid: %.4f, pids: %.4f, uids: %.4f' % (fid, pids, uids))
+    root_path = os.environ.get('TORCH_HOME')
+    output_name = args.output_name
+    kind = args.kind
+    cat_test_real_256 = f'{root_path}/datasets/afhq/test_origin/{kind}'
+    cat_test_real_256_for_thick = f'{root_path}/datasets/afhq/test_origin/{kind}_for_thick'
+    three_model_name = ['model0', 'model1', 'last']
 
-    # --------------- for medium mask -------------
-    inpainted_img_path = f'/home/mona/codes/lama/outputs/{output_name}/{model_name}_random_medium_256'
-    folder1, folder2 = inpainted_img_path, cat_test_real_256
+    for model_name in three_model_name:
+        # -------------- for thin mask -------------
+        inpainted_img_path = f'{root_path}/outputs/{output_name}/{model_name}_random_thin_256'
+        folder1, folder2 = inpainted_img_path, cat_test_real_256
 
-    fid, pids, uids = calculate_metrics(folder1, folder2)
-    print('fid: %.4f, pids: %.4f, uids: %.4f' % (fid, pids, uids))
-    with open(f'/home/mona/codes/lama/outputs/{output_name}/{model_name}_medium_fid_pids_uids.txt', 'w') as f:
-        f.write('fid: %.4f, pids: %.4f, uids: %.4f' % (fid, pids, uids))
+        fid, pids, uids = calculate_metrics(folder1, folder2)
+        print('fid: %.4f, pids: %.4f, uids: %.4f' % (fid, pids, uids))
+        with open(f'{root_path}/outputs/{output_name}/{model_name}_thin_fid_pids_uids.txt', 'w') as f:
+            f.write('fid: %.4f, pids: %.4f, uids: %.4f' % (fid, pids, uids))
 
-    # --------------- for thick mask ----------------
-    inpainted_img_path = f'/home/mona/codes/lama/outputs/{output_name}/{model_name}_random_thick_256'
-    folder1, folder2 = inpainted_img_path, cat_test_real_256_for_thick
+        # --------------- for medium mask -------------
+        inpainted_img_path = f'{root_path}/outputs/{output_name}/{model_name}_random_medium_256'
+        folder1, folder2 = inpainted_img_path, cat_test_real_256
 
-    fid, pids, uids = calculate_metrics(folder1, folder2)
-    print('fid: %.4f, pids: %.4f, uids: %.4f' % (fid, pids, uids))
-    with open(f'/home/mona/codes/lama/outputs/{output_name}/{model_name}_thick_fid_pids_uids.txt', 'w') as f:
-        f.write('fid: %.4f, pids: %.4f, uids: %.4f' % (fid, pids, uids))
+        fid, pids, uids = calculate_metrics(folder1, folder2)
+        print('fid: %.4f, pids: %.4f, uids: %.4f' % (fid, pids, uids))
+        with open(f'{root_path}/outputs/{output_name}/{model_name}_medium_fid_pids_uids.txt', 'w') as f:
+            f.write('fid: %.4f, pids: %.4f, uids: %.4f' % (fid, pids, uids))
+
+        # --------------- for thick mask ----------------
+        inpainted_img_path = f'{root_path}/outputs/{output_name}/{model_name}_random_thick_256'
+        folder1, folder2 = inpainted_img_path, cat_test_real_256_for_thick
+
+        fid, pids, uids = calculate_metrics(folder1, folder2)
+        print('fid: %.4f, pids: %.4f, uids: %.4f' % (fid, pids, uids))
+        with open(f'{root_path}/outputs/{output_name}/{model_name}_thick_fid_pids_uids.txt', 'w') as f:
+            f.write('fid: %.4f, pids: %.4f, uids: %.4f' % (fid, pids, uids))
 

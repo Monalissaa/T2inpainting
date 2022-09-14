@@ -1,7 +1,7 @@
 
-mv /home/szh/ZYB/lama-under-limited-data/outputs/2022-09-14/11-54-37 /home/szh/ZYB/lama-under-limited-data/experiments/lama-transfer-dog-random-seed2
+mv /home/szh/ZYB/lama-under-limited-data/outputs/2022-09-14/20-28-23 /home/szh/ZYB/lama-under-limited-data/experiments/lama-transfer-dog-random-seed2-aug-from-scratch
 
-bash outputs/lama-transfer-dog-random-seed2/predict\&metric.sh
+bash outputs/lama-transfer-dog-random-seed2-aug-from-scratch/predict\&metric.sh
 
 # bash outputs/lama-transfer-wild-aug/predict\&metric.sh
 
