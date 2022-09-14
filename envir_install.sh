@@ -2,8 +2,8 @@
 # cd ZYB/
 # git clone https://github.com/Monalissaa/lama-under-limited-data.git
 
-conda create -n lama python=3.6 -y
-conda activate lama
+# conda create -n lama python=3.6 -y
+# conda activate lama
 conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
 pip install focal-frequency-loss
 pip install BeautifulSoup4
