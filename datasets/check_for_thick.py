@@ -1,8 +1,8 @@
 import os
 
-test_origin_path = '/home/mona/codes/lama/datasets/afhq/test_origin/wild'
+test_origin_path = '/home/mona/codes/lama/datasets/afhq/test_origin/ukiyoe'
 
-test_thick_path = '/home/mona/codes/lama/datasets/afhq/test/test_256_with_mask/wild/random_thick_256'
+test_thick_path = '/home/mona/codes/lama/datasets/ukiyoe/ukiyoe-256/test256_ukiyoe_500_with_mask/random_thick_256'
 
 list_test_origin = os.listdir(test_origin_path)
 list_test_thick = [x[:-12]+'.jpg' for x in os.listdir(test_thick_path) if 'mask' not in x]

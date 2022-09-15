@@ -1,7 +1,7 @@
 
-mv /home/mona/codes/lama/outputs/2022-09-14/08-53-42 /home/mona/codes/lama/experiments/lama-transfer-wild-aug/
+mv /home/mona/codes/lama/outputs/2022-09-15/13-56-05 /home/mona/codes/lama/experiments/lama-transfer-dog-aug-from-scratch/
 
-bash outputs/lama-transfer-wild-aug/predict\&metric.sh
+bash outputs/lama-transfer-dog-aug-from-scratch/predict\&metric.sh
 
 # bash outputs/lama-transfer-wild-aug/predict\&metric.sh
 
@@ -13,7 +13,7 @@ bash outputs/lama-transfer-wild-aug/predict\&metric.sh
 
 
 
-mv experiments/lama-transfer-wild-aug /mnt/d/post/codes/lama/experiment/
+mv experiments/lama-transfer-dog-aug-from-scratch /mnt/d/post/codes/lama/experiment/
 
 # mv experiments/lama-transfer-wild-aug_fix_middleBlocks_convl2l_convg2l_fix_UpDown_without_featureMatching_loss /mnt/d/post/codes/lama/experiment/
 

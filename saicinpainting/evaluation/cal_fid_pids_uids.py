@@ -124,7 +124,7 @@ class FeatureStats:
         return obj
 
 
-def calculate_metrics(folder1, folder2):
+def calculate_metrics(folder1, folder2, kind):
     l1 = sorted(glob.glob(folder1 + '/*.png') + glob.glob(folder1 + '/*.jpg'))
     l2 = sorted(glob.glob(folder2 + '/*.png') + glob.glob(folder2 + '/*.jpg'))
     assert(len(l1) == len(l2))
@@ -144,11 +144,15 @@ def calculate_metrics(folder1, folder2):
 
     with torch.no_grad():
         for i, (fpath1, fpath2) in enumerate(zip(l1, l2)):
-            print(i)
+            # print(i)
             _, name1 = os.path.split(fpath1)
             _, name2 = os.path.split(fpath2)
-            name1 = name1.split('.')[0][:-16]
-            name2 = name2.split('.')[0]
+            if kind=='ukiyoe':
+                name1 = name1.split('.')[1][:-16]
+                name2 = name2.split('.')[1]
+            else:
+                name1 = name1.split('.')[0][:-16]
+                name2 = name2.split('.')[0]
             assert name1 == name2, 'Illegal mapping: %s, %s' % (name1, name2)
 
             img1 = read_image(fpath1).to(device)
@@ -191,6 +195,7 @@ if __name__ == '__main__':
     aparser = argparse.ArgumentParser()
     aparser.add_argument('--output_name', type=str, help='the dir name in outputs')
     aparser.add_argument('--kind', type=str, help='the dir name in outputs')
+    aparser.add_argument('--model_name', type=str, default='all', help='')
     args = aparser.parse_args()
 
     root_path = os.environ.get('TORCH_HOME')
@@ -198,14 +203,18 @@ if __name__ == '__main__':
     kind = args.kind
     cat_test_real_256 = f'{root_path}/datasets/afhq/test_origin/{kind}'
     cat_test_real_256_for_thick = f'{root_path}/datasets/afhq/test_origin/{kind}_for_thick'
-    three_model_name = ['model0', 'model1', 'last']
+
+    if args.model_name=='all':
+        three_model_name = ['model0', 'model1', 'last']
+    else:
+        three_model_name = [args.model_name]
 
     for model_name in three_model_name:
         # -------------- for thin mask -------------
         inpainted_img_path = f'{root_path}/outputs/{output_name}/{model_name}_random_thin_256'
         folder1, folder2 = inpainted_img_path, cat_test_real_256
 
-        fid, pids, uids = calculate_metrics(folder1, folder2)
+        fid, pids, uids = calculate_metrics(folder1, folder2, kind)
         print('fid: %.4f, pids: %.4f, uids: %.4f' % (fid, pids, uids))
         with open(f'{root_path}/outputs/{output_name}/{model_name}_thin_fid_pids_uids.txt', 'w') as f:
             f.write('fid: %.4f, pids: %.4f, uids: %.4f' % (fid, pids, uids))
@@ -214,7 +223,7 @@ if __name__ == '__main__':
         inpainted_img_path = f'{root_path}/outputs/{output_name}/{model_name}_random_medium_256'
         folder1, folder2 = inpainted_img_path, cat_test_real_256
 
-        fid, pids, uids = calculate_metrics(folder1, folder2)
+        fid, pids, uids = calculate_metrics(folder1, folder2, kind)
         print('fid: %.4f, pids: %.4f, uids: %.4f' % (fid, pids, uids))
         with open(f'{root_path}/outputs/{output_name}/{model_name}_medium_fid_pids_uids.txt', 'w') as f:
             f.write('fid: %.4f, pids: %.4f, uids: %.4f' % (fid, pids, uids))
@@ -223,7 +232,7 @@ if __name__ == '__main__':
         inpainted_img_path = f'{root_path}/outputs/{output_name}/{model_name}_random_thick_256'
         folder1, folder2 = inpainted_img_path, cat_test_real_256_for_thick
 
-        fid, pids, uids = calculate_metrics(folder1, folder2)
+        fid, pids, uids = calculate_metrics(folder1, folder2, kind)
         print('fid: %.4f, pids: %.4f, uids: %.4f' % (fid, pids, uids))
         with open(f'{root_path}/outputs/{output_name}/{model_name}_thick_fid_pids_uids.txt', 'w') as f:
             f.write('fid: %.4f, pids: %.4f, uids: %.4f' % (fid, pids, uids))
