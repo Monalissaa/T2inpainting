@@ -12,10 +12,16 @@
 
 # bash run_predict.sh
 
-python3 bin/train.py -cn lama-celebahq_full_config_wild_random_seed2.yaml
+python3 bin/train.py -cn lama-celebahq_full_config_wild_random_seed2_aug_from_scratch
 
 bash 3090_cx_run_predict.sh
 
-echo "go go go" | mail -s "3090_cx-run-lama_transfer_wild_100_random_seed2-completed!" 937315849@qq.com
+echo "go go go" | mail -s "3090_cx-run-lama_transfer_wild_100_random_seed2_aug_from_scratch-completed!" 937315849@qq.com
 
+
+python3 bin/train.py -cn lama-celebahq_full_config_wild_random_seed2_aug
+
+bash 3090_cx_run_predict.sh
+
+echo "go go go" | mail -s "3090_cx-run-lama_transfer_wild_100_random_seed2_aug-completed!" 937315849@qq.com
 
