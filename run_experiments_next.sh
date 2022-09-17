@@ -1,5 +1,5 @@
-experiment_name=lama-celebahq_full_config_ukiyoe_random_seed2_aug_from_scratch
-kind=ukiyoe
+experiment_name=lama-celebahq_full_config_cat_random_seed3_aug_fix_m_cl2l_cg2l_fix_UD_wo_fm_loss_stage_two_aug_no_fix_wo_fm_loss
+kind=cat
 # create experiments dir
 mkdir experiments/$experiment_name
 
@@ -48,8 +48,8 @@ mv experiments/$experiment_name /mnt/d/post/codes/lama/experiment/
 
 ###################################### second
 
-experiment_name=lama-celebahq_full_config_ukiyoe_random_seed3_aug_from_scratch
-kind=ukiyoe
+experiment_name=lama-celebahq_full_config_cat_random_seed3_aug
+kind=cat
 # create experiments dir
 mkdir experiments/$experiment_name
 

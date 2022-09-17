@@ -147,6 +147,7 @@ pretrained/
 /datasets/val256crop/
 /datasets/val256crop_100/
 /datasets/wave_pictures/
+/datasets/MetFace/
 datasets/filelist.txt
 datasets/filelist.txt.xz
 datasets/ukiyoe-1024-v2.tar

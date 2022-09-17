@@ -3,7 +3,15 @@ python3 outputs/change_model_name.py \
 
 MODEL_PATH=$2/$3
 PROJECT_NAME=$2
-TEST_DATA=afhq/test/test_256_with_mask/$4
+if [[ "$4" = "ukiyoe" ]]
+then
+    TEST_DATA=datasets/ukiyoe/ukiyoe-256/test256_ukiyoe_500_with_mask
+elif [[ "$4" = "MetFace" ]]
+then
+    TEST_DATA=datasets/MetFace/test_500_with_mask_random_seed10002
+else
+    TEST_DATA=afhq/test/test_256_with_mask/$4
+fi
 
 
 # ------------------------- model0 --------------------------

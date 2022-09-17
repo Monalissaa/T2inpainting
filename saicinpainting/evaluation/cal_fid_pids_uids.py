@@ -201,8 +201,12 @@ if __name__ == '__main__':
     root_path = os.environ.get('TORCH_HOME')
     output_name = args.output_name
     kind = args.kind
-    cat_test_real_256 = f'{root_path}/datasets/afhq/test_origin/{kind}'
-    cat_test_real_256_for_thick = f'{root_path}/datasets/afhq/test_origin/{kind}_for_thick'
+    if kind=='MetFace':
+        cat_test_real_256 = f'{root_path}/datasets/MetFace/test_500_source_random_seed10002'
+        cat_test_real_256_for_thick = f'{root_path}/datasets/MetFace/test_500_source_random_seed10002_for_thick'
+    else:
+        cat_test_real_256 = f'{root_path}/datasets/afhq/test_origin/{kind}'
+        cat_test_real_256_for_thick = f'{root_path}/datasets/afhq/test_origin/{kind}_for_thick'
 
     if args.model_name=='all':
         three_model_name = ['model0', 'model1', 'last']

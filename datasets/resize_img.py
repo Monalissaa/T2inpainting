@@ -4,8 +4,8 @@ import shutil
 from PIL import Image
 from tqdm import tqdm
 
-source_path = '/home/mona/codes/lama/datasets/ukiyoe/ukiyoe-1024'
-target_path = '/home/mona/codes/lama/datasets/ukiyoe/ukiyoe-256'
+source_path = '/home/mona/codes/lama/datasets/MetFace/images'
+target_path = '/home/mona/codes/lama/datasets/MetFace/all-256'
 
 target_size = (256, 256)
 
