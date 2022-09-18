@@ -1,5 +1,5 @@
-experiment_name=lama-celebahq_full_config_MetFace_random_seed2_aug_from_scratch
-kind=MetFace
+experiment_name=lama-celebahq_full_config_dog_random_seed3_aug_fix_m_cl2l_cg2l_fix_UD_wo_fm_loss
+kind=dog
 # create experiments dir
 mkdir experiments/$experiment_name
 
@@ -43,4 +43,4 @@ mv $experiment_dir_in_outputs experiments/$experiment_name/
 bash outputs/predict\&metric_template.sh $PWD/experiments/$experiment_name/$second_level_name/models $experiment_name $second_level_name $kind
 #
 # send email to notice
-echo "go go go" | mail -s "3090_szh_lama-transfer-MetFace-random-seed2-aug-from-scratch" 937315849@qq.com
+echo "go go go" | mail -s "3090_szh_lama-transfer-dog-random-seed3-our1" 937315849@qq.com
