@@ -36,7 +36,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 # @hydra.main(config_path='../configs/prediction', config_name='default_inner_features.yaml')
-@hydra.main(config_path='../configs/prediction', config_name='default_modify.yaml')
+@hydra.main(config_path='../configs/prediction', config_name='default_modify_our.yaml')
 def main(predict_config: OmegaConf):
     try:
         register_debug_signal_handlers()  # kill -10 <pid> will result in traceback dumped into log
@@ -84,8 +84,11 @@ def main(predict_config: OmegaConf):
                 for level_i, level in enumerate(model.generator.model):
                     feats = level(feats)
                     if level_i in predict_config.levels:
-                        cur_feats = torch.cat([f for f in feats if torch.is_tensor(f)], dim=1) \
-                            if isinstance(feats, tuple) else feats
+                        if level_i>4 and level_i<14:
+                            cur_feats = feats[1]
+                        else:
+                            cur_feats = torch.cat([f for f in feats if torch.is_tensor(f)], dim=1) \
+                                if isinstance(feats, tuple) else feats
 
                         if predict_config.slice_channels:
                             cur_feats = cur_feats[:, slice(*predict_config.slice_channels)]
@@ -97,7 +100,7 @@ def main(predict_config: OmegaConf):
                         cur_feat = cur_feat.cpu().numpy()[0]
                         cur_feat *= 255
                         cur_feat = np.clip(cur_feat, 0, 255).astype('uint8')
-                        cv2.imwrite(cur_out_fname + f'_lev{level_i:02d}_norm.png', cur_feat)
+                        cv2.imwrite(cur_out_fname + f'_lev{level_i:02d}_norm_1.png', cur_feat)
 
                         # for channel_i in predict_config.channels:
                         #

@@ -166,3 +166,6 @@ tb_logs/
 
 # hub
 hub/
+
+# other repo
+feature_vis/

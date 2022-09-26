@@ -1,8 +1,8 @@
-indir: /home/mona/codes/lama/datasets/val256crop_100/withMask/random_thick_256  # to be overriden in CLI
-outdir: /home/mona/codes/lama/outputs/big-lama-transfer/inner_features  # to be overriden in CLI
+indir: ${env:TORCH_HOME}/datasets/afhq/test/test_256_with_mask/cat/random_thick_256  # to be overriden in CLI
+outdir: ${env:TORCH_HOME}/outputs/big-lama-transfer/inner_features  # to be overriden in CLI
 
 model:
-  path: /home/mona/codes/lama/experiments/big-lama-with-discr  # to be overriden in CLI
+  path: ${env:TORCH_HOME}/experiments/big-lama-with-discr  # to be overriden in CLI
   checkpoint: best.ckpt
 
 dataset:

@@ -1,21 +1,48 @@
-# python3 bin/train.py -cn lama-celebahq_full_config_dog_aug_fix_middleBlocks_convl2l_convg2l_fix_UpDown_without_featureMatching_loss
+experiment_name=lama-celebahq_full_config_cat_random_seed2_aug_fix_m_cl2l_cg2l_fix_UD_wo_fm_50val
+kind=cat
+# create experiments dir
+mkdir experiments/$experiment_name
 
-# python3 bin/train.py -cn lama-celebahq_full_config_dog_aug_fix_middleBlocks_convl2l_convg2l_fix_UpDown_without_featureMatching_loss_stage_two_aug_no_fix_without_featureMatching_loss
+# run experiment
+python3 bin/train.py -cn $experiment_name
 
-# python3 bin/train.py -cn lama-celebahq_full_config_dog_aug
+# create outputs dir
+mkdir outputs/$experiment_name
 
-# python3 bin/train.py -cn lama-celebahq_full_config_wild_aug_fix_middleBlocks_convl2l_convg2l_fix_UpDown_without_featureMatching_loss_stage_two_aug_no_fix_without_featureMatching_loss
+# look for the true experiment dir in outputs
+path='outputs'
+files=$(ls $path)
+first_level_need_contain='2022'
+first_level_name=''
+for filename in $files
+do
+   if [[ $filename == *$first_level_need_contain* ]]
+   then
+     first_level_name=$filename
+   else
+     break
+   fi
+done
 
-# bash run_predict.sh
+path_second_level=outputs/$first_level_name
+files=$(ls $path_second_level)
+second_level_name=''
+for filename in $files
+do
+   second_level_name=$filename
+done
 
-# python3 bin/train.py -cn lama-celebahq_full_config_ukiyoe_aug_fix_middleBlocks_convl2l_convg2l_fix_UpDown_without_featureMatching_loss
+experiment_dir_in_outputs=outputs/$first_level_name/$second_level_name
 
-# bash run_predict.sh
 
-python3 bin/train.py -cn lama-celebahq_full_config_cat_random_seed2.yaml
 
-bash p40_run_predict.sh
+# mv experiment in outputs to experiments dir
+mv $experiment_dir_in_outputs experiments/$experiment_name/
 
-echo "go go go" | mail -s "p40-run-lama_transfer_cat_100_random_seed2-completed!" 937315849@qq.com
+# run predict & metric
+bash outputs/predict\&metric_template.sh $PWD/experiments/$experiment_name/$second_level_name/models $experiment_name $second_level_name $kind
+#
+# send email to notice
+echo "go go go" | mail -s "p40-lama-transfer-cat_random_seed2_aug_our1_50val" 937315849@qq.com
 
 
