@@ -389,6 +389,154 @@ class FFCResNetGenerator(nn.Module):
         # return input
         return self.model(input)
 
+def calc_mean_var(feat, eps=1e-5):
+    # eps is a small value added to the variance to avoid divide-by-zero.
+    size = feat.size()
+    assert (len(size) == 4)
+    N, C = size[:2]
+    feat_var = feat.view(N, C, -1).var(dim=2) + eps
+    feat_var = feat_var.view(N, C, 1, 1)
+    # feat_std = feat_var.sqrt().view(N, C, 1, 1)
+    feat_mean = feat.view(N, C, -1).mean(dim=2).view(N, C, 1, 1)
+    return feat_mean, feat_var
+
+
+def FSM(x, y, alpha, eps=1e-5):
+    # x_mu, x_var = tf.nn.moments(x, axes=[1,2], keepdims=True) # Nx1x1xC
+    # y_mu, y_var = tf.nn.moments(y, axes=[1,2], keepdims=True) # Nx1x1xC
+
+    x_mu, x_var = calc_mean_var(x) 
+    y_mu, y_var = calc_mean_var(y) 
+    
+    # normalize
+    x_norm = (x - x_mu) / torch.sqrt(x_var + eps)
+    
+    # de-normalize
+    x_fsm = x_norm * torch.sqrt(y_var + eps) + y_mu
+    
+    # combine
+    x_mix = alpha * x + (1 - alpha) * x_fsm
+    
+    return x_mix # NxHxWxC
+
+class FFC_FSMR_BN_ACT(nn.Module):
+
+    def __init__(self, in_channels, out_channels,
+                 kernel_size, ratio_gin, ratio_gout,
+                 stride=1, padding=0, dilation=1, groups=1, bias=False,
+                 norm_layer=nn.BatchNorm2d, activation_layer=nn.Identity,
+                 padding_type='reflect',
+                 enable_lfu=True, **kwargs):
+        super(FFC_FSMR_BN_ACT, self).__init__()
+        self.ffc = FFC(in_channels, out_channels, kernel_size,
+                       ratio_gin, ratio_gout, stride, padding, dilation,
+                       groups, bias, enable_lfu, padding_type=padding_type, **kwargs)
+        lnorm = nn.Identity if ratio_gout == 1 else norm_layer
+        gnorm = nn.Identity if ratio_gout == 0 else norm_layer
+        global_channels = int(out_channels * ratio_gout)
+        self.bn_l = lnorm(out_channels - global_channels)
+        self.bn_g = gnorm(global_channels)
+
+        lact = nn.Identity if ratio_gout == 1 else activation_layer
+        gact = nn.Identity if ratio_gout == 0 else activation_layer
+        self.act_l = lact(inplace=True)
+        self.act_g = gact(inplace=True)
+
+    def forward(self, x, use_fsmr=False, shuffle_indices=None, alpha=0):
+        x_l, x_g = self.ffc(x)
+        if use_fsmr:
+            if torch.is_tensor(x_g):
+                y_l, y_g =  x_l[shuffle_indices], x_g[shuffle_indices]
+                x_l, x_g = FSM(x_l, y_l, alpha), FSM(x_g, y_g, alpha)
+            else:
+                y_l =  x_l[shuffle_indices]
+                x_l = FSM(x_l, y_l, alpha)
+        x_l = self.act_l(self.bn_l(x_l))
+        x_g = self.act_g(self.bn_g(x_g))
+        return x_l, x_g
+
+class FFCResNetFSMRGenerator(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d,
+                 padding_type='reflect', activation_layer=nn.ReLU,
+                 up_norm_layer=nn.BatchNorm2d, up_activation=nn.ReLU(True),
+                 init_conv_kwargs={}, downsample_conv_kwargs={}, resnet_conv_kwargs={},
+                 spatial_transform_layers=None, spatial_transform_kwargs={},
+                 add_out_act=True, max_features=1024, out_ffc=False, out_ffc_kwargs={}):
+        assert (n_blocks >= 0)
+        super().__init__()
+
+        model = [nn.ReflectionPad2d(3),
+                 FFC_FSMR_BN_ACT(input_nc, ngf, kernel_size=7, padding=0, norm_layer=norm_layer,
+                            activation_layer=activation_layer, **init_conv_kwargs)]
+
+        ### downsample
+        for i in range(n_downsampling):
+            mult = 2 ** i
+            if i == n_downsampling - 1:
+                cur_conv_kwargs = dict(downsample_conv_kwargs)
+                cur_conv_kwargs['ratio_gout'] = resnet_conv_kwargs.get('ratio_gin', 0)
+            else:
+                cur_conv_kwargs = downsample_conv_kwargs
+            model += [FFC_FSMR_BN_ACT(min(max_features, ngf * mult),
+                                 min(max_features, ngf * mult * 2),
+                                 kernel_size=3, stride=2, padding=1,
+                                 norm_layer=norm_layer,
+                                 activation_layer=activation_layer,
+                                 **cur_conv_kwargs)]
+
+        mult = 2 ** n_downsampling
+        feats_num_bottleneck = min(max_features, ngf * mult)
+
+        ### resnet blocks
+        for i in range(n_blocks):
+            cur_resblock = FFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            model += [cur_resblock]
+
+        model += [ConcatTupleLayer()]
+
+        ### upsample
+        for i in range(n_downsampling):
+            mult = 2 ** (n_downsampling - i)
+            model += [nn.ConvTranspose2d(min(max_features, ngf * mult),
+                                         min(max_features, int(ngf * mult / 2)),
+                                         kernel_size=3, stride=2, padding=1, output_padding=1),
+                      up_norm_layer(min(max_features, int(ngf * mult / 2))),
+                      up_activation]
+
+        if out_ffc:
+            model += [FFCResnetBlock(ngf, padding_type=padding_type, activation_layer=activation_layer,
+                                     norm_layer=norm_layer, inline=True, **out_ffc_kwargs)]
+
+        model += [nn.ReflectionPad2d(3),
+                  nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        if add_out_act:
+            model.append(get_activation('tanh' if add_out_act is True else add_out_act))
+        self.model = nn.Sequential(*model)
+
+    def forward(self, input, use_fsmr=False, fsmr_blocks=0):
+        if use_fsmr:
+            axis = 0
+            shuffle_indices = torch.randperm(input.shape[axis])
+            # shuffle_indices = torch.random.shuffle(indices)
+            alpha = torch.FloatTensor(1).uniform_(0,1).cuda()
+
+            input = self.model[0](input)  ## first ReflectionPad2d
+
+            for block in range(1,fsmr_blocks+1):  ## need fsmr block
+                
+                input = self.model[block](input, use_fsmr=True, shuffle_indices=shuffle_indices, alpha=alpha)
+
+            for block in self.model[fsmr_blocks+1:]:  ## to last block
+                input = block(input)
+            
+            return input
+        else:
+            return self.model(input)
+
+
 class FFCResNetGeneratorDropout(nn.Module):
     def __init__(self, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d,
                  padding_type='reflect', activation_layer=nn.ReLU,

@@ -62,7 +62,7 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
         # self.estimate_fisher()
 
 
-    def forward(self, batch):
+    def forward(self, batch, mode='test'):
 
         if self.training and self.rescale_size_getter is not None:
             cur_size = self.rescale_size_getter(self.global_step)
@@ -118,6 +118,9 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
                 batch['acti_model'], batch['acti_small_model'], batch['predicted_image'] = self.generator(masked_img, self.training)
             else: 
                 batch['predicted_image'] = self.generator(masked_img, self.training)
+            batch['inpainted'] = mask * batch['predicted_image'] + (1 - mask) * batch['image']
+        elif self.config.new_params.fsmr.blocks>0 and mode=='train':
+            batch['predicted_image'] = self.generator(masked_img, use_fsmr=True, fsmr_blocks=self.config.new_params.fsmr.blocks)
             batch['inpainted'] = mask * batch['predicted_image'] + (1 - mask) * batch['image']
         else:
             batch['predicted_image'] = self.generator(masked_img)

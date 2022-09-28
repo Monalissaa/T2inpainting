@@ -1,7 +1,7 @@
 import logging
 
 from saicinpainting.training.modules.ffc import FFCResNetGenerator, FFCResNetGeneratorSecondStage, FFCResNetGeneratorSpottune, FFCResNetGeneratorSimpleAdd, \
-    FFCResNetGeneratorMaxChangeAdd, FFCResNetGeneratorSmall, FFCResNetGeneratorDropout
+    FFCResNetGeneratorMaxChangeAdd, FFCResNetGeneratorSmall, FFCResNetGeneratorDropout, FFCResNetFSMRGenerator
 from saicinpainting.training.modules.pix2pixhd import GlobalGenerator, MultiDilatedGlobalGenerator, \
     NLayerDiscriminator, MultidilatedNLayerDiscriminator, WaveNLayerDiscriminator
 
@@ -28,6 +28,8 @@ def make_generator(config, kind, **kwargs):
         elif config.new_params.p_dropout>0:
             kwargs['p_dropout'] = config.new_params.p_dropout
             return FFCResNetGeneratorDropout(**kwargs)
+        elif config.new_params.fsmr.blocks>0:
+            return FFCResNetFSMRGenerator(**kwargs)
         else:
             return FFCResNetGenerator(**kwargs)
 

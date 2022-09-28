@@ -432,7 +432,7 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
                 # exit(0)
 
 
-        batch = self(batch)
+        batch = self(batch, mode)
 
         total_loss = 0
         metrics = {}
