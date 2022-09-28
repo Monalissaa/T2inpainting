@@ -62,7 +62,7 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
         # self.estimate_fisher()
 
 
-    def forward(self, batch, mode='test'):
+    def forward(self, batch):
 
         if self.training and self.rescale_size_getter is not None:
             cur_size = self.rescale_size_getter(self.global_step)
@@ -119,8 +119,12 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
             else: 
                 batch['predicted_image'] = self.generator(masked_img, self.training)
             batch['inpainted'] = mask * batch['predicted_image'] + (1 - mask) * batch['image']
-        elif self.config.new_params.fsmr.blocks>0 and mode=='train':
-            batch['predicted_image'] = self.generator(masked_img, use_fsmr=True, fsmr_blocks=self.config.new_params.fsmr.blocks)
+        elif self.config.new_params.fsmr.pl>0:
+            batch['predicted_image'] = self.generator(masked_img)
+            batch['predicted_image_fsmr'] = self.generator(masked_img, use_fsmr=True, fsmr_blocks=self.config.new_params.fsmr.blocks)
+            # else:  ## directly use the fsmr
+            #     batch['predicted_image'] = self.generator(masked_img, use_fsmr=True, fsmr_blocks=self.config.new_params.fsmr.blocks)
+
             batch['inpainted'] = mask * batch['predicted_image'] + (1 - mask) * batch['image']
         else:
             batch['predicted_image'] = self.generator(masked_img)
@@ -354,6 +358,12 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
             wave_ffl_loss = self.config.new_params.wave_ffl_loss * self.loss_ffl(predicted_H, image_H)
             total_loss = total_loss + wave_ffl_loss
             metrics['wave_ffl_loss'] = wave_ffl_loss
+
+        if self.config.new_params.fsmr.pl > 0:
+            # predicted_img_fsmr = batch['predicted_image_fsmr']
+            segm_pl_value_fsmr = self.config.new_params.fsmr.pl * self.loss_segm_pl(predicted_img, batch['predicted_image_fsmr'])
+            total_loss = total_loss + segm_pl_value_fsmr
+            metrics['gen_resnet_pl_fsmr'] = segm_pl_value_fsmr
 
         return total_loss, metrics
 

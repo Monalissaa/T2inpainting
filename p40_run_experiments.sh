@@ -1,4 +1,4 @@
-experiment_name=lama-celebahq_full_config_cat_random_seed2_aug_fix_m_cl2l_cg2l_fix_UD_wo_fm_50val
+experiment_name=lama-celebahq_full_config_cat_100_transfer_fsmr3blocks_aug_fix_m_cl2l_cg2l_UD_wo_fm_fsmr_pl
 kind=cat
 # create experiments dir
 mkdir experiments/$experiment_name
@@ -42,7 +42,71 @@ mv $experiment_dir_in_outputs experiments/$experiment_name/
 # run predict & metric
 bash outputs/predict\&metric_template.sh $PWD/experiments/$experiment_name/$second_level_name/models $experiment_name $second_level_name $kind
 #
+
+output_name=$experiment_name
+
+echo "---------------------thin_mask_results--------------------" >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/last_random_thin_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/last_thin_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+cat outputs/$output_name/model0_random_thin_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/model0_thin_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+cat outputs/$output_name/model1_random_thin_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/model1_thin_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+echo "---------------------medium_mask_results--------------------" >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/last_random_medium_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/last_medium_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+cat outputs/$output_name/model0_random_medium_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/model0_medium_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+cat outputs/$output_name/model1_random_medium_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/model1_medium_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+echo "---------------------thick_mask_results--------------------" >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/last_random_thick_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/last_thick_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+cat outputs/$output_name/model0_random_thick_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/model0_thick_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+cat outputs/$output_name/model1_random_thick_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/model1_thick_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
 # send email to notice
-echo "go go go" | mail -s "p40-lama-transfer-cat_random_seed2_aug_our1_50val" 937315849@qq.com
+echo "go go go" | mail -s "p40-lama-transfer-cat_100_our1_fsmr_pl_loss" 937315849@qq.com
 
 
