@@ -378,6 +378,11 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
                     set_requires_grad_freezeD(self.generator, False, target_layer=f'conv1.ffc.convg2l')
                     set_requires_grad_freezeD(self.generator, False, target_layer=f'conv2.ffc.convl2l')
                     set_requires_grad_freezeD(self.generator, False, target_layer=f'conv2.ffc.convg2l')
+                elif self.config.new_params.fix_middleBlocks_convl2g_convg2g:
+                    set_requires_grad_freezeD(self.generator, False, target_layer=f'conv1.ffc.convl2g')
+                    set_requires_grad_freezeD(self.generator, False, target_layer=f'conv1.ffc.convg2g')
+                    set_requires_grad_freezeD(self.generator, False, target_layer=f'conv2.ffc.convl2g')
+                    set_requires_grad_freezeD(self.generator, False, target_layer=f'conv2.ffc.convg2g')
                 elif self.config.new_params.fix_middleBlocks_convl2l_convg2l_convl2g:
                     set_requires_grad_freezeD(self.generator, False, target_layer=f'conv1.ffc.convl2l')
                     set_requires_grad_freezeD(self.generator, False, target_layer=f'conv1.ffc.convg2l')

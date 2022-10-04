@@ -1,0 +1,171 @@
+run_title: swu_celeba_bs30
+training_model:
+  kind: default
+  visualize_each_iters: 1000
+  concat_mask: true
+  store_discr_outputs_for_vis: true
+losses:
+  l1:
+    weight_missing: 0
+    weight_known: 10
+  perceptual:
+    weight: 0
+  adversarial:
+    kind: r1
+    weight: 10
+    gp_coef: 0.001
+    mask_as_fake_target: true
+    allow_scale_mask: true
+  feature_matching:
+    weight: 0
+  segm_pl:
+    weight: 30
+    weights_path: ${env:TORCH_HOME}
+optimizers:
+  generator:
+    kind: adam
+    lr: 0.001
+  discriminator:
+    kind: adam
+    lr: 0.0001
+visualizer:
+  key_order:
+  - image
+  - predicted_image
+  - discr_output_fake
+  - discr_output_real
+  - inpainted
+  rescale_keys:
+  - discr_output_fake
+  - discr_output_real
+  kind: directory
+  outdir: samples
+location:
+  data_root_dir: ${env:TORCH_HOME}/datasets/MetFace/train_100_random_seed1
+  out_root_dir: ${env:TORCH_HOME}/experiments/lama-fourier-afhq_train256_MetFace_100_transfer_random_seed1_aug_fix_m_cl2l_cg2l_UD_wo_fm_50val_stage_two_aug_no_fix_wo_fm_50_val/
+  tb_dir: ${env:TORCH_HOME}/tb_logs/lama-fourier-afhq_train256_MetFace_100_transfer_random_seed1_aug_fix_m_cl2l_cg2l_UD_wo_fm_50val_stage_two_aug_no_fix_wo_fm_50_val/
+data:
+  batch_size: 16
+  val_batch_size: 4
+  num_workers: 4
+  train:
+    indir: ${location.data_root_dir}/train
+    out_size: 256
+    mask_gen_kwargs:
+      irregular_proba: 1
+      irregular_kwargs:
+        max_angle: 4
+        max_len: 200
+        max_width: 100
+        max_times: 5
+        min_times: 1
+      box_proba: 1
+      box_kwargs:
+        margin: 10
+        bbox_min_size: 30
+        bbox_max_size: 150
+        max_times: 4
+        min_times: 1
+      segm_proba: 0
+    transform_variant: distortions
+    dataloader_kwargs:
+      batch_size: ${data.batch_size}
+      shuffle: true
+      num_workers: ${data.num_workers}
+  val:
+    indir: ${location.data_root_dir}/val
+    img_suffix: .png
+    dataloader_kwargs:
+      batch_size: ${data.val_batch_size}
+      shuffle: false
+      num_workers: ${data.num_workers}
+  visual_test: null
+generator:
+  kind: ffc_resnet
+  input_nc: 4
+  output_nc: 3
+  ngf: 64
+  n_downsampling: 3
+  n_blocks: 9
+  add_out_act: sigmoid
+  init_conv_kwargs:
+    ratio_gin: 0
+    ratio_gout: 0
+    enable_lfu: false
+  downsample_conv_kwargs:
+    ratio_gin: ${generator.init_conv_kwargs.ratio_gout}
+    ratio_gout: ${generator.downsample_conv_kwargs.ratio_gin}
+    enable_lfu: false
+  resnet_conv_kwargs:
+    ratio_gin: 0.75
+    ratio_gout: ${generator.resnet_conv_kwargs.ratio_gin}
+    enable_lfu: false
+discriminator:
+  kind: pix2pixhd_nlayer
+  input_nc: 3
+  ndf: 64
+  n_layers: 4
+evaluator:
+  kind: default
+  inpainted_key: inpainted
+  integral_kind: ssim_fid100_f1
+trainer:
+  kwargs:
+    gpus: -1
+    distributed_backend: ddp
+    max_epochs: 3200
+    gradient_clip_val: 1
+    log_gpu_memory: None
+    limit_train_batches: 60000
+    # val_check_interval: 2600
+    # log_save_interval: 250
+    precision: 32
+    terminate_on_nan: false
+    check_val_every_n_epoch: 50
+    num_sanity_val_steps: 8
+    replace_sampler_ddp: false
+  checkpoint_kwargs:
+    verbose: true
+    save_top_k: 2
+    save_last: true
+    period: 1
+    monitor: val_ssim_fid100_f1_total_mean
+    mode: max
+
+new_params:
+  two_stage: false
+  jump_number: 4
+  fix: false
+  feature_loc: [5, 6, 7, 8, 9, 10, 11, 12, 13]
+  spottune: false
+  simple_add: false
+  max_change_add: false
+  ewc_lambda: 0
+  ewc_onlyFFCResnet: true
+  ewc_onlyUp: false
+  wave_dis: false
+  contrast: 0
+  randomInit: false
+  randomStartEnd: [12,15]
+  randomInitOnlyUp: false
+  randomInitDown: false
+  randomInitUniform: false
+  two_stage_from_init: true
+  resume_from_checkpoint: /home/szh/ZYB/lama-under-limited-data/experiments/lama-celebahq_full_config_MetFace_random_seed1_aug_fix_m_cl2l_cg2l_UD_wo_fm_50val/08-49-15/models/model1.ckpt
+  CWD: 0
+  temperature: 0.5
+  resume_from_transferred: /home/mona/codes/lama/experiments/big-lama-transfer/models/best.ckpt
+  from_cwd: false
+  from_cwd_path: /home/mona/codes/lama/experiments/big-lama-transfer-CWD-nBlocks9/10-47-00/models/best.ckpt
+  release_bn: false
+  bn_number: [1]
+  from_scratch: false
+  celeba: true
+  p_dropout: 0
+  ffl: 0
+  tv: 0
+  wave_segmpl_loss: 0
+  wave_ffl_loss: 0
+  fix_middleBlocks_convl2l_convg2l: false
+  fix_middleBlocks_convl2l_convg2l_convl2g: false
+  seed: 1
