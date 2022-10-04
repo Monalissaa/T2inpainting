@@ -204,6 +204,9 @@ if __name__ == '__main__':
     if kind=='MetFace':
         cat_test_real_256 = f'{root_path}/datasets/MetFace/test_500_source_random_seed10002'
         cat_test_real_256_for_thick = f'{root_path}/datasets/MetFace/test_500_source_random_seed10002_for_thick'
+    elif kind=='church':
+        cat_test_real_256 = f'{root_path}/datasets/church/test-2000-source-seed1002-256'
+        cat_test_real_256_for_thick = f'{root_path}/datasets/church/test-2000-source-seed1002-256'
     else:
         cat_test_real_256 = f'{root_path}/datasets/afhq/test_origin/{kind}'
         cat_test_real_256_for_thick = f'{root_path}/datasets/afhq/test_origin/{kind}_for_thick'
