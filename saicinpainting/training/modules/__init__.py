@@ -28,7 +28,7 @@ def make_generator(config, kind, **kwargs):
         elif config.new_params.p_dropout>0:
             kwargs['p_dropout'] = config.new_params.p_dropout
             return FFCResNetGeneratorDropout(**kwargs)
-        elif config.new_params.fsmr.blocks>0:
+        elif config.new_params.fsmr.pl>0:
             return FFCResNetFSMRGenerator(**kwargs)
         else:
             return FFCResNetGenerator(**kwargs)

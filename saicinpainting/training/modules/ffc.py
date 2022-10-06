@@ -401,7 +401,7 @@ def calc_mean_var(feat, eps=1e-5):
     return feat_mean, feat_var
 
 
-def FSM(x, y, alpha, eps=1e-5):
+def FSM(x, y, alpha, eps=1e-5, only_some_imgs=0):
     # x_mu, x_var = tf.nn.moments(x, axes=[1,2], keepdims=True) # Nx1x1xC
     # y_mu, y_var = tf.nn.moments(y, axes=[1,2], keepdims=True) # Nx1x1xC
 
@@ -417,6 +417,9 @@ def FSM(x, y, alpha, eps=1e-5):
     # combine
     x_mix = alpha * x + (1 - alpha) * x_fsm
     
+    if only_some_imgs>0:
+        x_mix = torch.cat([x[:-only_some_imgs,:,:,:],x_mix[-only_some_imgs:,:,:,:]],dim=0)
+
     return x_mix # NxHxWxC
 
 class FFC_FSMR_BN_ACT(nn.Module):
@@ -442,18 +445,60 @@ class FFC_FSMR_BN_ACT(nn.Module):
         self.act_l = lact(inplace=True)
         self.act_g = gact(inplace=True)
 
-    def forward(self, x, use_fsmr=False, shuffle_indices=None, alpha=0):
+    def forward(self, x, use_fsmr=False, shuffle_indices=None, alpha=0, only_x_g=False, only_some_imgs=0):
         x_l, x_g = self.ffc(x)
         if use_fsmr:
             if torch.is_tensor(x_g):
-                y_l, y_g =  x_l[shuffle_indices], x_g[shuffle_indices]
-                x_l, x_g = FSM(x_l, y_l, alpha), FSM(x_g, y_g, alpha)
+                if only_x_g:
+                    y_g = x_g[shuffle_indices]
+                    x_g = FSM(x_g, y_g, alpha, only_some_imgs=only_some_imgs)
+                else:
+                    y_l, y_g =  x_l[shuffle_indices], x_g[shuffle_indices]
+                    x_l, x_g = FSM(x_l, y_l, alpha, only_some_imgs=only_some_imgs), FSM(x_g, y_g, alpha, only_some_imgs=only_some_imgs)
             else:
                 y_l =  x_l[shuffle_indices]
-                x_l = FSM(x_l, y_l, alpha)
+                x_l = FSM(x_l, y_l, alpha, only_some_imgs=only_some_imgs)
         x_l = self.act_l(self.bn_l(x_l))
         x_g = self.act_g(self.bn_g(x_g))
         return x_l, x_g
+
+
+class FFC_FSMR_ResnetBlock(nn.Module):
+    def __init__(self, dim, padding_type, norm_layer, activation_layer=nn.ReLU, dilation=1,
+                 spatial_transform_kwargs=None, inline=False, **conv_kwargs):
+        super().__init__()
+        self.conv1 = FFC_FSMR_BN_ACT(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
+                                norm_layer=norm_layer,
+                                activation_layer=activation_layer,
+                                padding_type=padding_type,
+                                **conv_kwargs)
+        self.conv2 = FFC_FSMR_BN_ACT(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
+                                norm_layer=norm_layer,
+                                activation_layer=activation_layer,
+                                padding_type=padding_type,
+                                **conv_kwargs)
+        if spatial_transform_kwargs is not None:
+            self.conv1 = LearnableSpatialTransformWrapper(self.conv1, **spatial_transform_kwargs)
+            self.conv2 = LearnableSpatialTransformWrapper(self.conv2, **spatial_transform_kwargs)
+        self.inline = inline
+
+    def forward(self, x, use_fsmr=False, shuffle_indices=None, alpha=0, only_x_g=False, only_some_imgs=0):
+        if self.inline:
+            x_l, x_g = x[:, :-self.conv1.ffc.global_in_num], x[:, -self.conv1.ffc.global_in_num:]
+        else:
+            x_l, x_g = x if type(x) is tuple else (x, 0)
+
+        id_l, id_g = x_l, x_g
+
+        x_l, x_g = self.conv1((x_l, x_g), use_fsmr=use_fsmr, shuffle_indices=shuffle_indices, alpha=alpha, only_x_g=only_x_g, only_some_imgs=only_some_imgs)
+        x_l, x_g = self.conv2((x_l, x_g), use_fsmr=use_fsmr, shuffle_indices=shuffle_indices, alpha=alpha, only_x_g=only_x_g, only_some_imgs=only_some_imgs)
+
+        x_l, x_g = id_l + x_l, id_g + x_g
+        out = x_l, x_g
+        if self.inline:
+            out = torch.cat(out, dim=1)
+        return out
+
 
 class FFCResNetFSMRGenerator(nn.Module):
     def __init__(self, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d,
@@ -489,7 +534,7 @@ class FFCResNetFSMRGenerator(nn.Module):
 
         ### resnet blocks
         for i in range(n_blocks):
-            cur_resblock = FFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+            cur_resblock = FFC_FSMR_ResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
                                           norm_layer=norm_layer, **resnet_conv_kwargs)
             if spatial_transform_layers is not None and i in spatial_transform_layers:
                 cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
@@ -516,22 +561,88 @@ class FFCResNetFSMRGenerator(nn.Module):
             model.append(get_activation('tanh' if add_out_act is True else add_out_act))
         self.model = nn.Sequential(*model)
 
-    def forward(self, input, use_fsmr=False, fsmr_blocks=0):
+    def forward(self, input, use_fsmr=False, fsmr_blocks=None, only_x_g=False, only_some_imgs=0, feats_add=False, feats_add_both=False):
         if use_fsmr:
             axis = 0
             shuffle_indices = torch.randperm(input.shape[axis])
             # shuffle_indices = torch.random.shuffle(indices)
             alpha = torch.FloatTensor(1).uniform_(0,1).cuda()
-
-            input = self.model[0](input)  ## first ReflectionPad2d
-
-            for block in range(1,fsmr_blocks+1):  ## need fsmr block
-                
-                input = self.model[block](input, use_fsmr=True, shuffle_indices=shuffle_indices, alpha=alpha)
-
-            for block in self.model[fsmr_blocks+1:]:  ## to last block
+            block_number = 0
+            feat_number = 0
+            feats = []
+            for block in self.model[:fsmr_blocks[0]]:  ## to last block
                 input = block(input)
-            
+                if (block_number>0 and block_number<4) and feats_add:
+                    feats.append(input[0].clone())
+                    feat_number += 1
+                if block_number>14 and block.__class__.__name__=='ConvTranspose2d' and feats_add:
+                    input = input + feats[feat_number-1]
+                    feat_number -= 1
+                block_number += 1
+                # if isinstance(input, tuple):
+                #     if torch.is_tensor(input[0]):
+                #         print(input[0].shape)
+                #     if torch.is_tensor(input[1]):
+                #         print(input[1].shape)
+                # else:
+                #     print(input.shape)
+
+
+            for block in range(fsmr_blocks[0],fsmr_blocks[1]+1):  ## need fsmr block
+                block_class_name = self.model[block].__class__.__name__
+                if block_class_name == 'FFC_FSMR_BN_ACT' or block_class_name == 'FFC_FSMR_ResnetBlock':
+                    input = self.model[block](input, use_fsmr=True, shuffle_indices=shuffle_indices, alpha=alpha, only_x_g=only_x_g, only_some_imgs=only_some_imgs)
+                elif block_class_name == 'ConvTranspose2d' or block_class_name == 'Conv2d':
+                    input = self.model[block](input)
+                    y_input =  input[shuffle_indices]
+                    input = FSM(input, y_input, alpha)
+                else:
+                    input = self.model[block](input)
+                # if isinstance(input, tuple):
+                #     if torch.is_tensor(input[0]):
+                #         print(input[0].shape,end='         ')
+                #     if torch.is_tensor(input[1]):
+                #         print(input[1].shape)
+                # else:
+                #     print(input.shape)
+                if (block_number>0 and block_number<4) and feats_add:
+                    feats.append(input[0].clone())
+                    feat_number += 1
+                if block_number>14 and block.__class__.__name__=='ConvTranspose2d' and feats_add:
+                    input = input + feats[feat_number-1]
+                    feat_number -= 1
+                block_number += 1
+                
+            for block in self.model[fsmr_blocks[1]+1:]:  ## to last block
+                input = block(input)
+                # if isinstance(input, tuple):
+                #     if torch.is_tensor(input[0]):
+                #         print(input[0].shape,end='         ')
+                #     if torch.is_tensor(input[1]):
+                #         print(input[1].shape)
+                # else:
+                #     print(input.shape)
+                if (block_number>0 and block_number<4) and feats_add:
+                    feats.append(input[0].clone())
+                    feat_number += 1
+                if block_number>14 and block.__class__.__name__=='ConvTranspose2d' and feats_add:
+                    input = input + feats[feat_number-1]
+                    feat_number -= 1
+                block_number += 1
+            return input
+        elif feats_add_both:
+            block_number = 0
+            feat_number = 0
+            feats = []
+            for block in self.model:  
+                input = block(input)
+                if (block_number>0 and block_number<4):
+                    feats.append(input[0].clone())
+                    feat_number += 1
+                if block_number>14 and block.__class__.__name__=='ConvTranspose2d':
+                    input = input + feats[feat_number-1]
+                    feat_number -= 1
+                block_number += 1
             return input
         else:
             return self.model(input)

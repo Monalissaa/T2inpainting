@@ -42,9 +42,9 @@ target_path = '/home/mona/codes/lama/datasets/afhq/test/all_cat_data_except_trai
 # print(len(train_all))
 
 
-all_img_path = '/home/mona/codes/lama/datasets/MetFace/all-256'
-test_img_path = '/home/mona/codes/lama/datasets/MetFace/test_500_source_random_seed10002'
-all_except_test_path = '/home/mona/codes/lama/datasets/MetFace/all-256-except-test'
+all_img_path = '/home/szh/ZYB/lsun/lsun/church_outdoor_all/all'
+test_img_path = '/home/szh/ZYB/lsun/lsun/church_outdoor_all/test-2000-source-seed1002'
+all_except_test_path = '/home/szh/ZYB/lsun/lsun/church_outdoor_all/all-except-test'
 
 # all_img_filename = os.listdir(all_img_path)
 # test_img_filename = os.listdir(test_img_path)
@@ -78,7 +78,7 @@ seed_everything(seed)
 all_img_filename = os.listdir(all_img_path)
 print(len(all_img_filename))
 
-test_need = random.sample(all_img_filename, 500)
+test_need = random.sample(all_img_filename, 2000)
 print(len(test_need))
 
 all_except_test = list(set(all_img_filename).difference(set(test_need)))

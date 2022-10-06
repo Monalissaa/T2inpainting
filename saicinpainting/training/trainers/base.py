@@ -88,7 +88,8 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         if not predict_only:
             self.save_hyperparameters(self.config)
             self.discriminator = make_discriminator(**self.config.discriminator)
-            self.adversarial_loss = make_discrim_loss(**self.config.losses.adversarial)
+            if self.config.new_params.only_pl_loss==False:
+                self.adversarial_loss = make_discrim_loss(**self.config.losses.adversarial)
             
             self.visualizer = make_visualizer(**self.config.visualizer)
             self.visualizer_html = HtmlPageVisualizer(num_rows = 500, num_cols = 1)
@@ -172,7 +173,8 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
 
 
     def configure_optimizers(self):
-        discriminator_params = list(self.discriminator.parameters())
+        if self.config.new_params.only_pl_loss==False:
+            discriminator_params = list(self.discriminator.parameters())
         if self.config.new_params.spottune:
             return [
                 dict(optimizer=make_optimizer(self.generator.parameters(), **self.config.optimizers.generator)),
@@ -197,6 +199,10 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
             return [
                 dict(optimizer=make_optimizer(self.generator.small_model.parameters(), **self.config.optimizers.generator)),
                 dict(optimizer=make_optimizer(discriminator_params, **self.config.optimizers.discriminator)),
+            ]
+        elif self.config.new_params.only_pl_loss:
+            return [
+                dict(optimizer=make_optimizer(self.generator.parameters(), **self.config.optimizers.generator)),
             ]
         else:
             return [
@@ -351,6 +357,8 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
             if optimizer_idx == 0:  # step for generator
                 set_requires_grad(self.generator, False)
                 set_requires_grad(self.discriminator, False)
+
+                
                 if self.config.new_params.wave_dis:
                     set_requires_grad(self.wave_discriminator, False)
                 if self.config.new_params.contrast>0:
@@ -417,6 +425,7 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
                 set_requires_grad(self.discriminator, True)
                 if self.config.new_params.wave_dis:
                     set_requires_grad_freezeD(self.wave_discriminator, True, target_layer=f'model')
+            
                 
                 
                 # set_requires_grad(self.wave_discriminator.model, True)
@@ -432,7 +441,7 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
                 # exit(0)
 
 
-        batch = self(batch)
+        batch = self(batch, optimizer_idx)
 
         total_loss = 0
         metrics = {}

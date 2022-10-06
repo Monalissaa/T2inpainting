@@ -85,68 +85,67 @@
 
 python3 bin/gen_mask_dataset.py \
 $(pwd)/configs/data_gen/random_thick_256.yaml \
-datasets/MetFace/train_100_random_seed1/val256_cat_500_source/ \
-datasets/MetFace/train_100_random_seed1/val/random_thick_256/ \
+datasets/afhq/train/train256_cat/train256_cat_25_random_seed1/val256_cat_500_source/ \
+datasets/afhq/train/train256_cat/train256_cat_25_random_seed1/val/random_thick_256/ \
 1 \
---ext png
+--ext jpg
 
 python3 bin/gen_mask_dataset.py \
 $(pwd)/configs/data_gen/random_thin_256.yaml \
-datasets/MetFace/train_100_random_seed1/val256_cat_500_source/ \
-datasets/MetFace/train_100_random_seed1/val/random_thin_256/ \
+datasets/afhq/train/train256_cat/train256_cat_25_random_seed1/val256_cat_500_source/ \
+datasets/afhq/train/train256_cat/train256_cat_25_random_seed1/val/random_thin_256/ \
 1 \
---ext png
+--ext jpg
 
 python3 bin/gen_mask_dataset.py \
 $(pwd)/configs/data_gen/random_medium_256.yaml \
-datasets/MetFace/train_100_random_seed1/val256_cat_500_source/ \
-datasets/MetFace/train_100_random_seed1/val/random_medium_256/ \
+datasets/afhq/train/train256_cat/train256_cat_25_random_seed1/val256_cat_500_source/ \
+datasets/afhq/train/train256_cat/train256_cat_25_random_seed1/val/random_medium_256/ \
 1 \
---ext png
+--ext jpg
 
 
 python3 bin/gen_mask_dataset.py \
 $(pwd)/configs/data_gen/random_thick_256.yaml \
-datasets/MetFace/train_100_random_seed2/val256_cat_500_source/ \
-datasets/MetFace/train_100_random_seed2/val/random_thick_256/ \
+datasets/afhq/train/train256_cat/train256_cat_25_random_seed2/val256_cat_500_source/ \
+datasets/afhq/train/train256_cat/train256_cat_25_random_seed2/val/random_thick_256/ \
 2 \
---ext png
+--ext jpg
 
 python3 bin/gen_mask_dataset.py \
 $(pwd)/configs/data_gen/random_thin_256.yaml \
-datasets/MetFace/train_100_random_seed2/val256_cat_500_source/ \
-datasets/MetFace/train_100_random_seed2/val/random_thin_256/ \
+datasets/afhq/train/train256_cat/train256_cat_25_random_seed2/val256_cat_500_source/ \
+datasets/afhq/train/train256_cat/train256_cat_25_random_seed2/val/random_thin_256/ \
 2 \
---ext png
+--ext jpg
 
 python3 bin/gen_mask_dataset.py \
 $(pwd)/configs/data_gen/random_medium_256.yaml \
-datasets/MetFace/train_100_random_seed2/val256_cat_500_source/ \
-datasets/MetFace/train_100_random_seed2/val/random_medium_256/ \
+datasets/afhq/train/train256_cat/train256_cat_25_random_seed2/val256_cat_500_source/ \
+datasets/afhq/train/train256_cat/train256_cat_25_random_seed2/val/random_medium_256/ \
 2 \
---ext png
-
+--ext jpg
 
 python3 bin/gen_mask_dataset.py \
 $(pwd)/configs/data_gen/random_thick_256.yaml \
-datasets/MetFace/train_100_random_seed3/val256_cat_500_source/ \
-datasets/MetFace/train_100_random_seed3/val/random_thick_256/ \
+datasets/afhq/train/train256_cat/train256_cat_25_random_seed3/val256_cat_500_source/ \
+datasets/afhq/train/train256_cat/train256_cat_25_random_seed3/val/random_thick_256/ \
 3 \
---ext png
+--ext jpg
 
 python3 bin/gen_mask_dataset.py \
 $(pwd)/configs/data_gen/random_thin_256.yaml \
-datasets/MetFace/train_100_random_seed3/val256_cat_500_source/ \
-datasets/MetFace/train_100_random_seed3/val/random_thin_256/ \
+datasets/afhq/train/train256_cat/train256_cat_25_random_seed3/val256_cat_500_source/ \
+datasets/afhq/train/train256_cat/train256_cat_25_random_seed3/val/random_thin_256/ \
 3 \
---ext png
+--ext jpg
 
 python3 bin/gen_mask_dataset.py \
 $(pwd)/configs/data_gen/random_medium_256.yaml \
-datasets/MetFace/train_100_random_seed3/val256_cat_500_source/ \
-datasets/MetFace/train_100_random_seed3/val/random_medium_256/ \
+datasets/afhq/train/train256_cat/train256_cat_25_random_seed3/val256_cat_500_source/ \
+datasets/afhq/train/train256_cat/train256_cat_25_random_seed3/val/random_medium_256/ \
 3 \
---ext png
+--ext jpg
 
 # python3 bin/gen_mask_dataset.py \
 # $(pwd)/configs/data_gen/train_mask_large.yaml \

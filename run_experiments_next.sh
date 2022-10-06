@@ -1,4 +1,4 @@
-experiment_name=lama-celebahq_full_config_cat_100_transfer_fsmr3blocks_aug_fix_m_cl2l_cg2l_UD_wo_fm
+experiment_name=lama-celebahq_full_config_cat_100_transfer_aug_fix_m_cl2l_cg2l_UD_wo_fm_fsmr_middle_feats_add_stage_two_aug_no_fix_wo_fm
 kind=cat
 # create experiments dir
 mkdir experiments/$experiment_name
@@ -108,11 +108,14 @@ echo "" >> outputs/$output_name/three_results.txt
 
 mv experiments/$experiment_name /mnt/d/post/codes/lama/experiment/
 
+# send email to notice
+echo "go go go 3090_714_cat_aug_transfer_our1_fmsr_feats_add_our2" | mail -s "3090_714_cat_aug_transfer_our1_fmsr_feats_add_our2!" 937315849@qq.com
 
 
-################################## second
+# ########################### second
 
-experiment_name=lama-celebahq_full_config_cat_100_transfer_fsmr4blocks_aug
+
+experiment_name=lama-celebahq_full_config_cat_100_transfer_aug_fix_m_cl2l_cg2l_UD_wo_fm_fsmr_middle_feats_add_stage_two_aug_no_fix_wo_fm_fsmr_middle_feats_add
 kind=cat
 # create experiments dir
 mkdir experiments/$experiment_name
@@ -221,3 +224,6 @@ cat outputs/$output_name/model1_thick_fid_pids_uids.txt >> outputs/$output_name/
 echo "" >> outputs/$output_name/three_results.txt
 
 mv experiments/$experiment_name /mnt/d/post/codes/lama/experiment/
+
+# send email to notice
+echo "go go go 3090_714_cat_aug_transfer_our1_fmsr_feats_add_our2_fsmr_feats_add" | mail -s "3090_714_cat_aug_transfer_our1_fmsr_feats_add_our2_fsmr_feats_add!" 937315849@qq.com
