@@ -142,6 +142,7 @@ pretrained/
 
 # datasets
 /datasets/afhq/
+/datasets/church/
 /datasets/focal_pictures/
 /datasets/ukiyoe/
 /datasets/val256crop/

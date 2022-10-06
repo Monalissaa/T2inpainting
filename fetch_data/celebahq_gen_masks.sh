@@ -85,68 +85,85 @@
 
 python3 bin/gen_mask_dataset.py \
 $(pwd)/configs/data_gen/random_thick_256.yaml \
-datasets/MetFace/train_100_random_seed1/val256_cat_500_source/ \
-datasets/MetFace/train_100_random_seed1/val/random_thick_256/ \
-1 \
+datasets/church/test-2000-source-seed1002-256/ \
+datasets/church/test-2000-source-seed1002-256-with-mask/random_thick_256/ \
+1002 \
 --ext png
 
 python3 bin/gen_mask_dataset.py \
 $(pwd)/configs/data_gen/random_thin_256.yaml \
-datasets/MetFace/train_100_random_seed1/val256_cat_500_source/ \
-datasets/MetFace/train_100_random_seed1/val/random_thin_256/ \
-1 \
+datasets/church/test-2000-source-seed1002-256/ \
+datasets/church/test-2000-source-seed1002-256-with-mask/random_thick_256/ \
+1002 \
 --ext png
 
 python3 bin/gen_mask_dataset.py \
 $(pwd)/configs/data_gen/random_medium_256.yaml \
-datasets/MetFace/train_100_random_seed1/val256_cat_500_source/ \
-datasets/MetFace/train_100_random_seed1/val/random_medium_256/ \
-1 \
+datasets/church/test-2000-source-seed1002-256/ \
+datasets/church/test-2000-source-seed1002-256-with-mask/random_thick_256/ \
+1002 \
 --ext png
 
+#python3 bin/gen_mask_dataset.py \
+#$(pwd)/configs/data_gen/random_thick_256.yaml \
+#datasets/afhq/train/train256_wild/train256_wild_4238/val256_cat_500_source/ \
+#datasets/afhq/train/train256_wild/train256_wild_4238/val/random_thick_256/ \
+#0
+#
+#python3 bin/gen_mask_dataset.py \
+#$(pwd)/configs/data_gen/random_thin_256.yaml \
+#datasets/afhq/train/train256_wild/train256_wild_4238/val256_cat_500_source/ \
+#datasets/afhq/train/train256_wild/train256_wild_4238/val/random_thin_256/ \
+#0
+#
+#python3 bin/gen_mask_dataset.py \
+#$(pwd)/configs/data_gen/random_medium_256.yaml \
+#datasets/afhq/train/train256_wild/train256_wild_4238/val256_cat_500_source/ \
+#datasets/afhq/train/train256_wild/train256_wild_4238s/val/random_medium_256/ \
+#0
 
-python3 bin/gen_mask_dataset.py \
-$(pwd)/configs/data_gen/random_thick_256.yaml \
-datasets/MetFace/train_100_random_seed2/val256_cat_500_source/ \
-datasets/MetFace/train_100_random_seed2/val/random_thick_256/ \
-2 \
---ext png
-
-python3 bin/gen_mask_dataset.py \
-$(pwd)/configs/data_gen/random_thin_256.yaml \
-datasets/MetFace/train_100_random_seed2/val256_cat_500_source/ \
-datasets/MetFace/train_100_random_seed2/val/random_thin_256/ \
-2 \
---ext png
-
-python3 bin/gen_mask_dataset.py \
-$(pwd)/configs/data_gen/random_medium_256.yaml \
-datasets/MetFace/train_100_random_seed2/val256_cat_500_source/ \
-datasets/MetFace/train_100_random_seed2/val/random_medium_256/ \
-2 \
---ext png
-
-
-python3 bin/gen_mask_dataset.py \
-$(pwd)/configs/data_gen/random_thick_256.yaml \
-datasets/MetFace/train_100_random_seed3/val256_cat_500_source/ \
-datasets/MetFace/train_100_random_seed3/val/random_thick_256/ \
-3 \
---ext png
-
-python3 bin/gen_mask_dataset.py \
-$(pwd)/configs/data_gen/random_thin_256.yaml \
-datasets/MetFace/train_100_random_seed3/val256_cat_500_source/ \
-datasets/MetFace/train_100_random_seed3/val/random_thin_256/ \
-3 \
---ext png
-
-python3 bin/gen_mask_dataset.py \
-$(pwd)/configs/data_gen/random_medium_256.yaml \
-datasets/MetFace/train_100_random_seed3/val256_cat_500_source/ \
-datasets/MetFace/train_100_random_seed3/val/random_medium_256/ \
-3 \
---ext png
+#python3 bin/gen_mask_dataset.py \
+#$(pwd)/configs/data_gen/random_thick_256.yaml \
+#datasets/MetFace/train_100_random_seed2/val256_cat_500_source/ \
+#datasets/MetFace/train_100_random_seed2/val/random_thick_256/ \
+#2 \
+#--ext png
+#
+#python3 bin/gen_mask_dataset.py \
+#$(pwd)/configs/data_gen/random_thin_256.yaml \
+#datasets/MetFace/train_100_random_seed2/val256_cat_500_source/ \
+#datasets/MetFace/train_100_random_seed2/val/random_thin_256/ \
+#2 \
+#--ext png
+#
+#python3 bin/gen_mask_dataset.py \
+#$(pwd)/configs/data_gen/random_medium_256.yaml \
+#datasets/MetFace/train_100_random_seed2/val256_cat_500_source/ \
+#datasets/MetFace/train_100_random_seed2/val/random_medium_256/ \
+#2 \
+#--ext png
+#
+#
+#python3 bin/gen_mask_dataset.py \
+#$(pwd)/configs/data_gen/random_thick_256.yaml \
+#datasets/MetFace/train_100_random_seed3/val256_cat_500_source/ \
+#datasets/MetFace/train_100_random_seed3/val/random_thick_256/ \
+#3 \
+#--ext png
+#
+#python3 bin/gen_mask_dataset.py \
+#$(pwd)/configs/data_gen/random_thin_256.yaml \
+#datasets/MetFace/train_100_random_seed3/val256_cat_500_source/ \
+#datasets/MetFace/train_100_random_seed3/val/random_thin_256/ \
+#3 \
+#--ext png
+#
+#python3 bin/gen_mask_dataset.py \
+#$(pwd)/configs/data_gen/random_medium_256.yaml \
+#datasets/MetFace/train_100_random_seed3/val256_cat_500_source/ \
+#datasets/MetFace/train_100_random_seed3/val/random_medium_256/ \
+#3 \
+#--ext png
 
 # python3 bin/gen_mask_dataset.py \
 # $(pwd)/configs/data_gen/train_mask_large.yaml \
