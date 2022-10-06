@@ -9,6 +9,9 @@ then
 elif [[ "$4" = "MetFace" ]]
 then
     TEST_DATA=MetFace/test_500_with_mask_random_seed10002
+elif [[ "$4" = "church" ]]
+then
+    TEST_DATA=church/test-2000-source-seed1002-256-with-mask
 else
     TEST_DATA=afhq/test/test_256_with_mask/$4
 fi

@@ -62,8 +62,7 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
         # self.estimate_fisher()
 
 
-    def forward(self, batch):
-
+    def forward(self, batch, optimizer_idx=None):
         if self.training and self.rescale_size_getter is not None:
             cur_size = self.rescale_size_getter(self.global_step)
             batch['image'] = F.interpolate(batch['image'], size=cur_size, mode='bilinear', align_corners=False)
@@ -78,7 +77,13 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
             batch['image'] = torch.cat([batch['image'], batch['image']], dim=0)
             batch['mask'] = torch.cat([batch['mask'], batch['mask_key']], dim=0)
             
-
+        if self.config.new_params.fsmr.only_some_imgs>0 and self.training:
+            if len(batch['image'])<=self.config.new_params.fsmr.only_some_imgs:
+                only_some_imgs = len(batch['image'])
+            else:
+                only_some_imgs = self.config.new_params.fsmr.only_some_imgs
+            batch['image'] = torch.cat([batch['image'], batch['image'][-only_some_imgs:,:,:,:]], dim=0)
+            batch['mask'] = torch.cat([batch['mask'], batch['mask'][-only_some_imgs:,:,:,:]], dim=0)
         img = batch['image']
         mask = batch['mask']
         if self.config.new_params.two_stage:
@@ -119,6 +124,28 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
             else: 
                 batch['predicted_image'] = self.generator(masked_img, self.training)
             batch['inpainted'] = mask * batch['predicted_image'] + (1 - mask) * batch['image']
+        elif self.config.new_params.fsmr.pl>0:
+            feats_add_both = self.config.new_params.fsmr.feats_add_both
+            if self.config.new_params.fsmr.only_some_imgs>0:
+                if self.training:
+                    batch['predicted_image'] = self.generator(masked_img, use_fsmr=True, fsmr_blocks=self.config.new_params.fsmr.blocks, \
+                        only_x_g=self.config.new_params.fsmr.only_x_g, only_some_imgs=only_some_imgs, feats_add_both=feats_add_both)
+                else:
+                    batch['predicted_image'] = self.generator(masked_img,feats_add_both=feats_add_both)
+            elif self.config.new_params.fsmr.third_epoch:
+                if self.current_epoch%3==0 and self.training and optimizer_idx==0:
+                    batch['predicted_image'] = self.generator(masked_img, use_fsmr=True, fsmr_blocks=self.config.new_params.fsmr.blocks, \
+                        only_x_g=self.config.new_params.fsmr.only_x_g, feats_add=self.config.new_params.fsmr.feats_add,feats_add_both=feats_add_both)
+                else:
+                    batch['predicted_image'] = self.generator(masked_img,feats_add_both=feats_add_both)
+            else:
+                batch['predicted_image'] = self.generator(masked_img,feats_add_both=feats_add_both)
+                batch['predicted_image_fsmr'] = self.generator(masked_img, use_fsmr=True, fsmr_blocks=self.config.new_params.fsmr.blocks, \
+                    only_x_g=self.config.new_params.fsmr.only_x_g, feats_add=self.config.new_params.fsmr.feats_add,feats_add_both=feats_add_both)
+            # else:  ## directly use the fsmr
+            #     batch['predicted_image'] = self.generator(masked_img, use_fsmr=True, fsmr_blocks=self.config.new_params.fsmr.blocks)
+
+            batch['inpainted'] = mask * batch['predicted_image'] + (1 - mask) * batch['image']
         else:
             batch['predicted_image'] = self.generator(masked_img)
             batch['inpainted'] = mask * batch['predicted_image'] + (1 - mask) * batch['image']
@@ -140,18 +167,37 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
         return batch
 
     def generator_loss(self, batch):
-        img = batch['image']
-        predicted_img = batch[self.image_to_discriminator]
-        original_mask = batch['mask']
-        supervised_mask = batch['mask_for_losses']
+        
 
-        # L1
-        l1_value = masked_l1_loss(predicted_img, img, supervised_mask,
-                                  self.config.losses.l1.weight_known,
-                                  self.config.losses.l1.weight_missing)
+        if self.training and self.config.new_params.fsmr.only_some_imgs>0:
+            if len(batch['image'])-self.config.new_params.fsmr.only_some_imgs<=self.config.new_params.fsmr.only_some_imgs:
+                only_some_imgs = int(len(batch['image'])/2)
+            else:
+                only_some_imgs = self.config.new_params.fsmr.only_some_imgs
+            img = batch['image'][:-only_some_imgs]
+            predicted_img = batch[self.image_to_discriminator][:-only_some_imgs]
+            original_mask = batch['mask'][:-only_some_imgs]
+            supervised_mask = batch['mask_for_losses'][:-only_some_imgs]
+        else:
+            img = batch['image']
+            predicted_img = batch[self.image_to_discriminator]
+            original_mask = batch['mask']
+            supervised_mask = batch['mask_for_losses']
+        
+        only_pl_loss = False
+        if self.config.new_params.only_pl_loss==True or (self.current_epoch%3==0 and self.training and self.config.new_params.fsmr.only_pl_loss):
+            only_pl_loss = True
+        metrics = dict()
+        total_loss = 0
 
-        total_loss = l1_value
-        metrics = dict(gen_l1=l1_value)
+        if only_pl_loss==False:
+            # L1
+            l1_value = masked_l1_loss(predicted_img, img, supervised_mask,
+                                    self.config.losses.l1.weight_known,
+                                    self.config.losses.l1.weight_missing)
+
+            total_loss = total_loss + l1_value
+            metrics['gen_l1'] = l1_value
 
         # vgg-based perceptual loss
         if self.config.losses.perceptual.weight > 0:
@@ -161,19 +207,20 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
 
         # discriminator
         # adversarial_loss calls backward by itself
-        mask_for_discr = supervised_mask if self.distance_weighted_mask_for_discr else original_mask
-        self.adversarial_loss.pre_generator_step(real_batch=img, fake_batch=predicted_img,
-                                                 generator=self.generator, discriminator=self.discriminator)
-        discr_real_pred, discr_real_features = self.discriminator(img)
-        discr_fake_pred, discr_fake_features = self.discriminator(predicted_img)
-        adv_gen_loss, adv_metrics = self.adversarial_loss.generator_loss(real_batch=img,
-                                                                         fake_batch=predicted_img,
-                                                                         discr_real_pred=discr_real_pred,
-                                                                         discr_fake_pred=discr_fake_pred,
-                                                                         mask=mask_for_discr)
-        total_loss = total_loss + adv_gen_loss
-        metrics['gen_adv'] = adv_gen_loss
-        metrics.update(add_prefix_to_keys(adv_metrics, 'adv_'))
+        if only_pl_loss==False:
+            mask_for_discr = supervised_mask if self.distance_weighted_mask_for_discr else original_mask
+            self.adversarial_loss.pre_generator_step(real_batch=img, fake_batch=predicted_img,
+                                                    generator=self.generator, discriminator=self.discriminator)
+            discr_real_pred, discr_real_features = self.discriminator(img)
+            discr_fake_pred, discr_fake_features = self.discriminator(predicted_img)
+            adv_gen_loss, adv_metrics = self.adversarial_loss.generator_loss(real_batch=img,
+                                                                            fake_batch=predicted_img,
+                                                                            discr_real_pred=discr_real_pred,
+                                                                            discr_fake_pred=discr_fake_pred,
+                                                                            mask=mask_for_discr)
+            total_loss = total_loss + adv_gen_loss
+            metrics['gen_adv'] = adv_gen_loss
+            metrics.update(add_prefix_to_keys(adv_metrics, 'adv_'))
 
 
         # feature matching
@@ -212,8 +259,21 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
                 total_loss = total_loss + wave_fm_value
                 metrics['gen_fm_wave'] = wave_fm_value
         
+        # if self.config.new_params.fsmr.pl > 0:
+        #     # predicted_img_fsmr = batch['predicted_image_fsmr']
+        #     if self.config.new_params.fsmr.toOrigin:
+        #         segm_pl_value_fsmr = self.config.new_params.fsmr.pl * self.loss_segm_pl(predicted_img, img)
+        #     else:
+        #         segm_pl_value_fsmr = self.config.new_params.fsmr.pl * self.loss_segm_pl(predicted_img, batch['predicted_image_fsmr'])
+        #     total_loss = total_loss + segm_pl_value_fsmr
+        #     metrics['gen_resnet_pl_fsmr'] = segm_pl_value_fsmr
+
+
         if self.loss_segm_pl is not None:
-            segm_pl_value = self.loss_segm_pl(predicted_img, img)
+            if self.training and self.config.new_params.fsmr.only_some_imgs>0:
+                segm_pl_value = self.loss_segm_pl(batch[self.image_to_discriminator], batch['image'])
+            else:
+                segm_pl_value = self.loss_segm_pl(predicted_img, img)
             total_loss = total_loss + segm_pl_value
             metrics['gen_resnet_pl'] = segm_pl_value
 
@@ -290,48 +350,6 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
             total_loss = total_loss + tv_loss
             metrics['tv_loss'] = tv_loss
 
-        # if self.config.new_params.wave_loss > 0:
-        #     predicted_image_LL, predicted_image_LH, predicted_image_HL, predicted_image_HH = self.wave_pool(predicted_img)
-        #     predicted_H = predicted_image_LH + predicted_image_HL + predicted_image_HH
-        #     image_LL, image_LH, image_HL, image_HH = self.wave_pool(img)
-        #     image_H = image_LH + image_HL + image_HH
-        #     if self.config.new_params.wave_loss_type == 'l1':
-        #         if self.config.new_params.wave_loss_frequency == 'four':
-        #             r = 0.4
-        #             wave_loss = (r*r*F.l1_loss(predicted_image_LL, image_LL, reduction='none') + (1-r)*r*F.l1_loss(predicted_image_LH, image_LH, reduction='none') + 
-        #                 (1-r)*r*F.l1_loss(predicted_image_HL, image_HL, reduction='none') + (1-r)*(1-r)*F.l1_loss(predicted_image_HH, image_HH, reduction='none')).mean()
-        #         elif self.config.new_params.wave_loss_frequency == 'three':
-        #             r = 0.4
-        #             wave_loss = ((1-r)*r*F.l1_loss(predicted_image_LH, image_LH, reduction='none') + 
-        #                 (1-r)*r*F.l1_loss(predicted_image_HL, image_HL, reduction='none') + (1-r)*(1-r)*F.l1_loss(predicted_image_HH, image_HH, reduction='none')).mean()
-        #         elif self.config.new_params.wave_loss_frequency == 'one':
-        #             wave_loss = F.l1_loss(predicted_H, image_H, reduction='none')
-        #     elif self.config.new_params.wave_loss_type == 'mse':
-        #         if self.config.new_params.wave_loss_frequency == 'four':
-        #             r = 0.4
-        #             wave_loss = (r*r*F.mse_loss(predicted_image_LL, image_LL, reduction='none') + (1-r)*r*F.mse_loss(predicted_image_LH, image_LH, reduction='none') + 
-        #                 (1-r)*r*F.mse_loss(predicted_image_HL, image_HL, reduction='none') + (1-r)*(1-r)*F.mse_loss(predicted_image_HH, image_HH, reduction='none')).mean()
-        #         elif self.config.new_params.wave_loss_frequency == 'three':
-        #             r = 0.4
-        #             wave_loss = ((1-r)*r*F.mse_loss(predicted_image_LH, image_LH, reduction='none') + 
-        #                 (1-r)*r*F.mse_loss(predicted_image_HL, image_HL, reduction='none') + (1-r)*(1-r)*F.mse_loss(predicted_image_HH, image_HH, reduction='none')).mean()
-        #         elif self.config.new_params.wave_loss_frequency == 'one':
-        #             wave_loss = F.mse_loss(predicted_H, image_H, reduction='none')
-        #     elif self.config.new_params.wave_loss_type == 'segm_pl':
-        #         if self.config.new_params.wave_loss_frequency == 'four':
-        #             r = 0.4
-        #             wave_loss = (r*r*self.loss_segm_pl(predicted_image_LL, image_LL ) + (1-r)*r*self.loss_segm_pl(predicted_image_LH, image_LH ) + 
-        #                 (1-r)*r*self.loss_segm_pl(predicted_image_HL, image_HL ) + (1-r)*(1-r)*self.loss_segm_pl(predicted_image_HH, image_HH )).mean()
-        #         elif self.config.new_params.wave_loss_frequency == 'three':
-        #             r = 0.4
-        #             wave_loss = ((1-r)*r*self.loss_segm_pl(predicted_image_LH, image_LH ) + 
-        #                 (1-r)*r*self.loss_segm_pl(predicted_image_HL, image_HL ) + (1-r)*(1-r)*self.loss_segm_pl(predicted_image_HH, image_HH )).mean()
-        #         elif self.config.new_params.wave_loss_frequency == 'one':
-        #             wave_loss = self.loss_segm_pl(predicted_H, image_H )
-        #     wave_loss *= self.config.new_params.wave_loss
-        #     total_loss = total_loss + wave_loss
-        #     metrics['wave_loss'] = wave_loss
-
         if self.config.new_params.wave_segmpl_loss > 0:
             _, predicted_image_LH, predicted_image_HL, predicted_image_HH = self.wave_pool(predicted_img)
             predicted_H = predicted_image_LH + predicted_image_HL + predicted_image_HH
@@ -352,22 +370,45 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
             total_loss = total_loss + wave_ffl_loss
             metrics['wave_ffl_loss'] = wave_ffl_loss
 
+        if self.config.new_params.fsmr.pl > 0 and self.config.new_params.fsmr.only_some_imgs==0 and self.config.new_params.fsmr.third_epoch==False:
+            # predicted_img_fsmr = batch['predicted_image_fsmr']
+            if self.config.new_params.fsmr.toOrigin:
+                segm_pl_value_fsmr = self.config.new_params.fsmr.pl * self.loss_segm_pl(batch['predicted_image_fsmr'], img)
+            else:
+                segm_pl_value_fsmr = self.config.new_params.fsmr.pl * self.loss_segm_pl(predicted_img, batch['predicted_image_fsmr'])
+            total_loss = total_loss + segm_pl_value_fsmr
+            metrics['gen_resnet_pl_fsmr'] = segm_pl_value_fsmr
+
         return total_loss, metrics
 
     def discriminator_loss(self, batch):
+        
+        if self.training and self.config.new_params.fsmr.only_some_imgs>0:
+            if len(batch['image'])-self.config.new_params.fsmr.only_some_imgs<=self.config.new_params.fsmr.only_some_imgs:
+                only_some_imgs = int(len(batch['image'])/2)
+            else:
+                only_some_imgs = self.config.new_params.fsmr.only_some_imgs
+            real_img = batch['image'][:-only_some_imgs]
+            mask = batch['mask'][:-only_some_imgs]
+            predicted_img = batch[self.image_to_discriminator][:-only_some_imgs].detach()
+        else:
+            real_img = batch['image']
+            mask = batch['mask']
+            predicted_img = batch[self.image_to_discriminator].detach()
         total_loss = 0
         metrics = {}
 
-        predicted_img = batch[self.image_to_discriminator].detach()
-        self.adversarial_loss.pre_discriminator_step(real_batch=batch['image'], fake_batch=predicted_img,
+        # predicted_img = batch[self.image_to_discriminator].detach()
+        self.adversarial_loss.pre_discriminator_step(real_batch=real_img, fake_batch=predicted_img,
                                                      generator=self.generator, discriminator=self.discriminator)
-        discr_real_pred, discr_real_features = self.discriminator(batch['image'])
+        discr_real_pred, discr_real_features = self.discriminator(real_img)
         discr_fake_pred, discr_fake_features = self.discriminator(predicted_img)
-        adv_discr_loss, adv_metrics = self.adversarial_loss.discriminator_loss(real_batch=batch['image'],
+
+        adv_discr_loss, adv_metrics = self.adversarial_loss.discriminator_loss(real_batch=real_img,
                                                                                fake_batch=predicted_img,
                                                                                discr_real_pred=discr_real_pred,
                                                                                discr_fake_pred=discr_fake_pred,
-                                                                               mask=batch['mask'])
+                                                                               mask=mask)
         total_loss = total_loss + adv_discr_loss
         metrics['discr_adv'] = adv_discr_loss
         metrics.update(add_prefix_to_keys(adv_metrics, 'adv_'))
@@ -375,15 +416,15 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
 
         if batch.get('use_fake_fakes', False):
             fake_fakes = batch['fake_fakes']
-            self.adversarial_loss.pre_discriminator_step(real_batch=batch['image'], fake_batch=fake_fakes,
+            self.adversarial_loss.pre_discriminator_step(real_batch=real_img, fake_batch=fake_fakes,
                                                          generator=self.generator, discriminator=self.discriminator)
             discr_fake_fakes_pred, _ = self.discriminator(fake_fakes)
             fake_fakes_adv_discr_loss, fake_fakes_adv_metrics = self.adversarial_loss.discriminator_loss(
-                real_batch=batch['image'],
+                real_batch=real_img,
                 fake_batch=fake_fakes,
                 discr_real_pred=discr_real_pred,
                 discr_fake_pred=discr_fake_fakes_pred,
-                mask=batch['mask']
+                mask=mask
             )
             total_loss = total_loss + fake_fakes_adv_discr_loss
             metrics['discr_adv_fake_fakes'] = fake_fakes_adv_discr_loss
@@ -463,7 +504,7 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
     def estimate_fisher(self, sample_size=1024, batch_size=16):
         # sample loglikelihoods from the dataset.
         data_config_for_ewc = self.config.data.train
-        data_config_for_ewc.indir = '/home/mona/codes/lama/datasets/val256crop'
+        # data_config_for_ewc.indir = '/home/mona/codes/lama/datasets/val256crop'
         data_loader = make_default_train_dataloader(**data_config_for_ewc)
 
         self.generator.to('cuda:0')
@@ -476,34 +517,37 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
 
 
         set_requires_grad(self.generator, True)
-        set_requires_grad(self.random_generator, False)
+        # set_requires_grad(self.random_generator, False)
         set_requires_grad(self.discriminator, False)
         count_data = 0
-        for batch in data_loader:
-            # print(11111)
-            img = Variable(batch['image']).cuda()
-            mask = Variable(batch['mask']).cuda()
-            # img = batch['image']
-            # mask = batch['mask']
-            masked_img = img * (1 - mask)
+        epochs = 10
+        for _ in range(epochs):
+            for batch in data_loader:
+                img = Variable(batch['image']).cuda()
+                mask = Variable(batch['mask']).cuda()
+                masked_img = img * (1 - mask)
 
-            if self.concat_mask:
-                masked_img = torch.cat([masked_img, mask], dim=1)
-            # masked_img = masked_img.to('cuda:0')
-            predicted_image = self.generator(masked_img)
+                if self.concat_mask:
+                    masked_img = torch.cat([masked_img, mask], dim=1)
+                # masked_img = masked_img.to('cuda:0')
+                predicted_image = self.generator(masked_img)
 
-            discr_fake_pred, _ = self.discriminator(predicted_image)
-            fake_loss = F.softplus(-discr_fake_pred)
-            # fake_loss = fake_loss.mean(dim=[2, 3])
-            fake_loss = fake_loss.mean()
-            fake_loss.backward()
-            # self.manual_backward(fake_loss)
+                pl_loss = self.loss_segm_pl(predicted_image, img)
+                pl_loss.backward()
+                ################## use discriminator loss
+                # discr_fake_pred, _ = self.discriminator(predicted_image)
+                # fake_loss = F.softplus(-discr_fake_pred)
+                # # fake_loss = fake_loss.mean(dim=[2, 3])
+                # fake_loss = fake_loss.mean()
+                # fake_loss.backward()
+                ###################
+                # self.manual_backward(fake_loss)
 
-            # loglikelihoods.append( fake_loss )
-            
-            count_data += 1
-            if count_data >= sample_size // batch_size:
-                break
+                # loglikelihoods.append( fake_loss )
+                
+                count_data += 1
+                if count_data >= sample_size // batch_size:
+                    break
         # estimate the fisher information of the parameters.
         # loglikelihoods = torch.cat(loglikelihoods).unbind()
         # loglikelihood_grads = zip(*[autograd.grad(
@@ -562,7 +606,7 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
         # plt.title('Fisher information')
         # # plt.ylabel('Fisher information') 
         # # plt.show()
-        # plt.savefig('/home/mona/codes/lama/fisher_sample{}_onlyFFCResnet.png'.format(sample_size))
+        # plt.savefig('/home/mona/codes/lama/fisher_sample{}_our1.png'.format(sample_size))
         # # plt.xlabel('X axis') 
         # exit(0)
         if self.config.new_params.ewc_onlyUp:

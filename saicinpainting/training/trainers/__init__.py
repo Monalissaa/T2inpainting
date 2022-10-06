@@ -36,9 +36,8 @@ def load_checkpoint(train_config, path, map_location='cuda', strict=True):
     # model.load_state_dict(state['state_dict'], strict=strict)
     # model.on_load_checkpoint(state)
     # model.estimate_fisher()
-
-    # # path_adapt = '/home/mona/codes/lama/experiments/big-lama-transfer/models/last.ckpt'
-    # path_adapt = '/home/mona/codes/lama/experiments/big-lama-transfer-randomInitUpDown/14-48-42/models/best.ckpt'
+    # path_adapt = '/home/mona/codes/lama/experiments/big-lama-transfer/models/last.ckpt'
+    # path_adapt = '/mnt/d/post/codes/lama/experiment/lama-transfer-aug_fix_middleBlocks_convl2l_convg2l_fix_UpDown_without_featureMatching_loss_stage_two_aug_no_fix_without_featureMatching_loss/04-57-24/models/last.ckpt'
     # state_adapt = torch.load(path_adapt, map_location=map_location)['state_dict']
 
     # state_change = {}
@@ -70,7 +69,7 @@ def load_checkpoint(train_config, path, map_location='cuda', strict=True):
     # plt.title('rate of changes on weights(%)')
     # # plt.ylabel('Fisher information') 
     # # plt.show()
-    # plt.savefig('/home/mona/codes/lama/rate_of_changes_on_weights_transfer_randomInitUpDown.png')
+    # plt.savefig('/home/mona/codes/lama/rate_of_changes_on_weights_our2.png')
     # # plt.xlabel('X axis') 
     # exit(0)
 

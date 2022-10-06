@@ -1,4 +1,4 @@
-experiment_name=lama-celebahq_full_config_cat_random_seed3_aug_fix_m_cl2l_cg2l_fix_UD_wo_fm_loss_stage_two_aug_no_fix_wo_fm_loss
+experiment_name=lama-celebahq_full_config_cat_100_transfer_aug_fix_m_cl2l_cg2l_UD_wo_fm_fsmr_middle_feats_add_stage_two_aug_no_fix_wo_fm
 kind=cat
 # create experiments dir
 mkdir experiments/$experiment_name
@@ -43,12 +43,79 @@ mv $experiment_dir_in_outputs experiments/$experiment_name/
 bash outputs/predict\&metric_template.sh $PWD/experiments/$experiment_name/$second_level_name/models $experiment_name $second_level_name $kind
 #
 
+output_name=$experiment_name
+
+echo "---------------------thin_mask_results--------------------" >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/last_random_thin_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/last_thin_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+cat outputs/$output_name/model0_random_thin_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/model0_thin_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+cat outputs/$output_name/model1_random_thin_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/model1_thin_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+echo "---------------------medium_mask_results--------------------" >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/last_random_medium_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/last_medium_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+cat outputs/$output_name/model0_random_medium_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/model0_medium_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+cat outputs/$output_name/model1_random_medium_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/model1_medium_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+echo "---------------------thick_mask_results--------------------" >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/last_random_thick_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/last_thick_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+cat outputs/$output_name/model0_random_thick_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/model0_thick_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+cat outputs/$output_name/model1_random_thick_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/model1_thick_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
 mv experiments/$experiment_name /mnt/d/post/codes/lama/experiment/
 
+# send email to notice
+echo "go go go 3090_714_cat_aug_transfer_our1_fmsr_feats_add_our2" | mail -s "3090_714_cat_aug_transfer_our1_fmsr_feats_add_our2!" 937315849@qq.com
 
-###################################### second
 
-experiment_name=lama-celebahq_full_config_cat_random_seed3_aug
+# ########################### second
+
+
+experiment_name=lama-celebahq_full_config_cat_100_transfer_aug_fix_m_cl2l_cg2l_UD_wo_fm_fsmr_middle_feats_add_stage_two_aug_no_fix_wo_fm_fsmr_middle_feats_add
 kind=cat
 # create experiments dir
 mkdir experiments/$experiment_name
@@ -93,4 +160,70 @@ mv $experiment_dir_in_outputs experiments/$experiment_name/
 bash outputs/predict\&metric_template.sh $PWD/experiments/$experiment_name/$second_level_name/models $experiment_name $second_level_name $kind
 #
 
+output_name=$experiment_name
+
+echo "---------------------thin_mask_results--------------------" >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/last_random_thin_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/last_thin_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+cat outputs/$output_name/model0_random_thin_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/model0_thin_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+cat outputs/$output_name/model1_random_thin_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/model1_thin_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+echo "---------------------medium_mask_results--------------------" >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/last_random_medium_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/last_medium_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+cat outputs/$output_name/model0_random_medium_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/model0_medium_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+cat outputs/$output_name/model1_random_medium_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/model1_medium_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+echo "---------------------thick_mask_results--------------------" >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/last_random_thick_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/last_thick_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+cat outputs/$output_name/model0_random_thick_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/model0_thick_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
+
+cat outputs/$output_name/model1_random_thick_256_metrics.csv >> outputs/$output_name/three_results.txt
+cat outputs/$output_name/model1_thick_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+echo "" >> outputs/$output_name/three_results.txt
+
 mv experiments/$experiment_name /mnt/d/post/codes/lama/experiment/
+
+# send email to notice
+echo "go go go 3090_714_cat_aug_transfer_our1_fmsr_feats_add_our2_fsmr_feats_add" | mail -s "3090_714_cat_aug_transfer_our1_fmsr_feats_add_our2_fsmr_feats_add!" 937315849@qq.com
