@@ -132,8 +132,9 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
                         only_x_g=self.config.new_params.fsmr.only_x_g, only_some_imgs=only_some_imgs, feats_add_both=feats_add_both)
                 else:
                     batch['predicted_image'] = self.generator(masked_img,feats_add_both=feats_add_both)
-            elif self.config.new_params.fsmr.third_epoch:
-                if self.current_epoch%3==0 and self.training and optimizer_idx==0:
+            elif self.config.new_params.fsmr.third_epoch>0:
+                third_epoch_number = self.config.new_params.fsmr.third_epoch
+                if self.current_epoch%third_epoch_number==0 and self.training and optimizer_idx==0:
                     batch['predicted_image'] = self.generator(masked_img, use_fsmr=True, fsmr_blocks=self.config.new_params.fsmr.blocks, \
                         only_x_g=self.config.new_params.fsmr.only_x_g, feats_add=self.config.new_params.fsmr.feats_add,feats_add_both=feats_add_both)
                 else:
@@ -185,7 +186,7 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
             supervised_mask = batch['mask_for_losses']
         
         only_pl_loss = False
-        if self.config.new_params.only_pl_loss==True or (self.current_epoch%3==0 and self.training and self.config.new_params.fsmr.only_pl_loss):
+        if self.config.new_params.only_pl_loss==True or (self.config.new_params.fsmr.third_epoch>0 and self.current_epoch%self.config.new_params.fsmr.third_epoch==0 and self.training and self.config.new_params.fsmr.only_pl_loss):
             only_pl_loss = True
         metrics = dict()
         total_loss = 0
