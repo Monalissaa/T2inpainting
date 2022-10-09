@@ -166,9 +166,11 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         LOGGER.info('BaseInpaintingTrainingModule init done')
 
         self.fisher_information_flag = False
+        self.weight_decay_only_conv_weight_flag = False
         if self.config.new_params.ewc_lambda > 0:
             self.fisher_information_flag = True
-
+        if self.config.new_params.weight_decay_only_conv_weight_lambda > 0:
+            self.weight_decay_only_conv_weight_flag = True
 
 
 
@@ -325,6 +327,13 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
             self.fisher_information_flag = False
             # self.config.new_params.ewc_lambda = None
             print('Done!!!')
+
+        if self.weight_decay_only_conv_weight_flag and self.config.new_params.weight_decay_only_conv_weight_lambda > 0:
+            print('#########################record origin params data########################')
+            self.record_origin_params_data()
+            self.weight_decay_only_conv_weight_flag = False
+
+
         if self.config.new_params.two_stage:
             if mode=='train':
                 if self.current_epoch < self.first_stage_epochs:

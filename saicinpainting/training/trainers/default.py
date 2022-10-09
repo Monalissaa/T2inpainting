@@ -379,6 +379,12 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
             total_loss = total_loss + segm_pl_value_fsmr
             metrics['gen_resnet_pl_fsmr'] = segm_pl_value_fsmr
 
+        if self.config.new_params.weight_decay_only_conv_weight_lambda > 0:
+            weight_decay_only_conv_weight_loss = (self.weight_decay_only_conv_weight() * self.config.new_params.weight_decay_only_conv_weight_lambda)/2
+            total_loss = total_loss + weight_decay_only_conv_weight_loss
+            metrics['weight_decay_only_conv_weight_loss'] = weight_decay_only_conv_weight_loss
+
+
         return total_loss, metrics
 
     def discriminator_loss(self, batch):
@@ -671,5 +677,22 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
                 Variable(torch.zeros(1)).cuda() if cuda else
                 Variable(torch.zeros(1))
             )
+
+    def record_origin_params_data(self):
+        for n, p in self.named_parameters():
+            if 'generator.model' in n and '.weight' in n and 'bn' not in n and p.dim()!=1:
+                n = n.replace('.', '_')
+                self.register_buffer('{}_mean'.format(n), p.data.clone())
+
+    def weight_decay_only_conv_weight(self):
+        losses = []
+        for n, p in self.named_parameters():
+            if 'generator.model' in n and '.weight' in n and 'bn' not in n and p.dim()!=1:
+                n = n.replace('.', '_')
+                mean = getattr(self, '{}_mean'.format(n))
+                mean = Variable(mean)
+                losses.append(((p-mean)**2).sum())
+        return sum(losses)
+
 
 
