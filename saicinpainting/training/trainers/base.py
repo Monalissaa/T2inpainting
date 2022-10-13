@@ -173,7 +173,6 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
             self.weight_decay_only_conv_weight_flag = True
 
 
-
     def configure_optimizers(self):
         if self.config.new_params.only_pl_loss==False:
             discriminator_params = list(self.discriminator.parameters())
@@ -182,7 +181,6 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
                 dict(optimizer=make_optimizer(self.generator.parameters(), **self.config.optimizers.generator)),
                 dict(optimizer=make_optimizer(discriminator_params, **self.config.optimizers.discriminator)),
                 dict(optimizer=make_optimizer(self.agent.parameters(), **self.config.optimizers.discriminator)),
-                # dict(optimizer=make_optimizer(wave_discriminator_params, **self.config.optimizers.discriminator)),
             ]
         elif self.config.new_params.wave_dis:
             wave_discriminator_params = list(self.wave_discriminator.parameters())

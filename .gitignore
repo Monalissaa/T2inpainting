@@ -154,6 +154,9 @@ datasets/filelist.txt.xz
 datasets/ukiyoe-1024-v2.tar
 datasets/ukiyoe-1024-v2.tar:Zone.Identifier
 datasets/*.zip
+datasets/generate_train_val.py
+
+fetch_data/celebahq_gen_masks.sh
 
 
 # experiments
