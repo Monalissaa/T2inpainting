@@ -1,4 +1,7 @@
-mv experiments/lama-celebahq_full_config_cat_horizontal_flip_transfer_data2000_trainx3 /mnt/d/post/codes/lama/experiment/
+mv experiments/big-lama-place2_full_config_cat_seed0_wo_fm_tsa_g2g_l2l /mnt/d/post/codes/lama/experiment/
+
+# mv experiments/lama-celebahq_full_config_cat_aug_only_release_ten_blocks /mnt/d/post/codes/lama/experiment/
+
 
 # mv experiments/lama-transfer-aug_fix_middleBlocks_convl2l_convg2l_fix_UpDown_without_featureMatching_loss_stage_two_horizontal_flip_no_fix_without_featureMatching_loss_with_l1_weight60_loss /mnt/d/post/codes/lama/experiment/
 

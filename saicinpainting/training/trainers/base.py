@@ -204,6 +204,11 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
             return [
                 dict(optimizer=make_optimizer(self.generator.parameters(), **self.config.optimizers.generator)),
             ]
+        elif self.config.new_params.fix_add_ffc:
+            return [
+                dict(optimizer=make_optimizer(self.generator.additional_model.parameters(), **self.config.optimizers.generator)),
+                dict(optimizer=make_optimizer(discriminator_params, **self.config.optimizers.discriminator)),
+            ] 
         else:
             return [
                 dict(optimizer=make_optimizer(self.generator.parameters(), **self.config.optimizers.generator)),
@@ -366,19 +371,64 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
                 set_requires_grad(self.discriminator, False)
 
                 
-                if self.config.new_params.wave_dis:
-                    set_requires_grad(self.wave_discriminator, False)
-                if self.config.new_params.contrast>0:
-                    set_requires_grad(self.contrast_discriminator, True)
+                # if self.config.new_params.wave_dis:
+                #     set_requires_grad(self.wave_discriminator, False)
+                # if self.config.new_params.contrast>0:
+                #     set_requires_grad(self.contrast_discriminator, True)
+
+
 
                 if self.config.new_params.fix:
                     feature_loc = self.config.new_params.feature_loc
                     for loc in feature_loc:
                         set_requires_grad_freezeD(self.generator, True, target_layer=f'model.{loc}.')
+                    
+                elif self.config.new_params.fix_add_ffc:
+                    set_requires_grad(self.generator.additional_model, True)
+                elif self.config.new_params.two_stage_from_init==False and (self.config.new_params.tsa.four or self.config.new_params.tsa.two or self.config.new_params.tsa.one \
+                    or self.config.new_params.tsa.g2g):
+                    # for name, _ in self.generator.named_parameters():
+                    #     if 'alpha' in name:
+                    set_requires_grad_freezeD(self.generator, True, target_layer='alpha')
+
+                    # ----------- next ---------------
+                    if self.config.new_params.tsa.end_to_end:
+                        if self.current_epoch>=(self.config.trainer.kwargs.max_epochs/2):
+                            set_requires_grad(self.generator.model, True)
+                            set_requires_grad_freezeD(self.generator, False, target_layer='alpha')
+
+                    # --------------------------------
+                    # if self.config.new_params.tsa.pa:
+                    #     set_requires_grad_freezeD(self.generator, True, target_layer='pa')
+                    # if self.config.new_params.tsa.first_block:
+                    #     set_requires_grad_freezeD(self.generator, True, target_layer='model.1.')
+                    # if self.config.new_params.tsa.last_block:
+                    #     set_requires_grad_freezeD(self.generator, True, target_layer='model.34.')   
+                    # if self.config.new_params.tsa.UpDown_blocks: 
+                    #     for loc in range(1,5):
+                    #         set_requires_grad_freezeD(self.generator, True, target_layer=f'model.{loc}.')
+                    #     for loc in range(24, 36):
+                    #         set_requires_grad_freezeD(self.generator, True, target_layer=f'model.{loc}.')
                 else:
                     set_requires_grad(self.generator.model, True)
                     if self.config.new_params.spottune:
                         set_requires_grad(self.agent, True)
+                    elif self.config.new_params.tsa.fix_alpha:
+                        set_requires_grad_freezeD(self.generator, False, target_layer='alpha')
+
+                if self.config.new_params.only_bn:
+                    for name, _ in self.generator.named_parameters():
+                        if 'bn' not in name:
+                            set_requires_grad_freezeD(self.generator, False, target_layer=name)
+                elif self.config.new_params.only_global_bn:
+                    for name, _ in self.generator.named_parameters():
+                        if ('bn' not in name) or ('bn_l' in name):
+                            set_requires_grad_freezeD(self.generator, False, target_layer=name)
+                elif self.config.new_params.only_g2g_bn:
+                    for name, _ in self.generator.named_parameters():
+                        if ('bn' not in name) or ('bn_l' in name) or ('bn_g' in name):
+                            set_requires_grad_freezeD(self.generator, False, target_layer=name)
+
                 if self.config.new_params.release_bn:
                     feature_loc_bn = self.config.new_params.bn_number
                     for loc in feature_loc_bn:
@@ -393,6 +443,7 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
                     set_requires_grad_freezeD(self.generator, False, target_layer=f'conv1.ffc.convg2l')
                     set_requires_grad_freezeD(self.generator, False, target_layer=f'conv2.ffc.convl2l')
                     set_requires_grad_freezeD(self.generator, False, target_layer=f'conv2.ffc.convg2l')
+                    
                 elif self.config.new_params.fix_middleBlocks_convl2g_convg2g:
                     set_requires_grad_freezeD(self.generator, False, target_layer=f'conv1.ffc.convl2g')
                     set_requires_grad_freezeD(self.generator, False, target_layer=f'conv1.ffc.convg2g')

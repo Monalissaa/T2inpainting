@@ -389,6 +389,1665 @@ class FFCResNetGenerator(nn.Module):
         # return input
         return self.model(input)
 
+class TsaG2GConvL2LFFC(nn.Module):
+
+    def __init__(self, in_channels, out_channels, kernel_size,
+                 ratio_gin, ratio_gout, stride=1, padding=0,
+                 dilation=1, groups=1, bias=False, enable_lfu=True,
+                 padding_type='reflect', gated=False, **spectral_kwargs):
+        super(TsaG2GConvL2LFFC, self).__init__()
+
+        assert stride == 1 or stride == 2, "Stride should be 1 or 2."
+        self.stride = stride
+
+        in_cg = int(in_channels * ratio_gin)
+        in_cl = in_channels - in_cg
+        out_cg = int(out_channels * ratio_gout)
+        out_cl = out_channels - out_cg
+        #groups_g = 1 if groups == 1 else int(groups * ratio_gout)
+        #groups_l = 1 if groups == 1 else groups - groups_g
+
+        self.ratio_gin = ratio_gin
+        self.ratio_gout = ratio_gout
+        self.global_in_num = in_cg
+
+        module = nn.Identity if in_cl == 0 or out_cl == 0 else nn.Conv2d
+        self.convl2l = module(in_cl, out_cl, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cl == 0 or out_cg == 0 else nn.Conv2d
+        self.convl2g = module(in_cl, out_cg, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cg == 0 or out_cl == 0 else nn.Conv2d
+        self.convg2l = module(in_cg, out_cl, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cg == 0 or out_cg == 0 else SpectralTransform
+        self.convg2g = module(
+            in_cg, out_cg, stride, 1 if groups == 1 else groups // 2, enable_lfu, **spectral_kwargs)
+
+        self.gated = gated
+        module = nn.Identity if in_cg == 0 or out_cl == 0 or not self.gated else nn.Conv2d
+        self.gate = module(in_channels, 2, 1)
+
+        module = nn.Identity if in_cl == 0 or out_cl == 0 else nn.Conv2d
+        self.convl2l_alpha = module(in_cl, out_cl, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+
+        module = nn.Identity if in_cg == 0 or out_cg == 0 else SpectralTransform
+        self.convg2g_alpha = module(
+            in_cg, out_cg, stride, 1 if groups == 1 else groups // 2, enable_lfu, **spectral_kwargs)
+        
+
+    def forward(self, x):
+        x_l, x_g = x if type(x) is tuple else (x, 0)
+        out_xl, out_xg = 0, 0
+
+        if self.gated:
+            total_input_parts = [x_l]
+            if torch.is_tensor(x_g):
+                total_input_parts.append(x_g)
+            total_input = torch.cat(total_input_parts, dim=1)
+
+            gates = torch.sigmoid(self.gate(total_input))
+            g2l_gate, l2g_gate = gates.chunk(2, dim=1)
+        else:
+            g2l_gate, l2g_gate = 1, 1
+
+        if self.ratio_gout != 1:
+            # tas_convl2l =  + F.conv2d(x_l, self.convl2l_alpha, stride=self.convl2l.stride)
+            out_xl = self.convl2l(x_l) + self.convl2l_alpha(x_l) + self.convg2l(x_g) * g2l_gate
+        if self.ratio_gout != 0:
+            out_xg = self.convl2g(x_l) * l2g_gate + self.convg2g(x_g) + self.convg2g_alpha(x_g)        
+
+        return out_xl, out_xg
+
+class TsaG2GConvL2LFFC_BN_ACT(nn.Module):
+
+    def __init__(self, in_channels, out_channels,
+                 kernel_size, ratio_gin, ratio_gout,
+                 stride=1, padding=0, dilation=1, groups=1, bias=False,
+                 norm_layer=nn.BatchNorm2d, activation_layer=nn.Identity,
+                 padding_type='reflect',
+                 enable_lfu=True, **kwargs):
+        super(TsaG2GConvL2LFFC_BN_ACT, self).__init__()
+        self.ffc = TsaG2GConvL2LFFC(in_channels, out_channels, kernel_size,
+                       ratio_gin, ratio_gout, stride, padding, dilation,
+                       groups, bias, enable_lfu, padding_type=padding_type, **kwargs)
+        lnorm = nn.Identity if ratio_gout == 1 else norm_layer
+        gnorm = nn.Identity if ratio_gout == 0 else norm_layer
+        global_channels = int(out_channels * ratio_gout)
+        self.bn_l = lnorm(out_channels - global_channels)
+        self.bn_g = gnorm(global_channels)
+
+        lact = nn.Identity if ratio_gout == 1 else activation_layer
+        gact = nn.Identity if ratio_gout == 0 else activation_layer
+        self.act_l = lact(inplace=True)
+        self.act_g = gact(inplace=True)
+
+    def forward(self, x):
+        x_l, x_g = self.ffc(x)
+        x_l = self.act_l(self.bn_l(x_l))
+        x_g = self.act_g(self.bn_g(x_g))
+        return x_l, x_g
+
+class TsaG2GConvL2LFFCResnetBlock(nn.Module):
+    def __init__(self, dim, padding_type, norm_layer, activation_layer=nn.ReLU, dilation=1,
+                 spatial_transform_kwargs=None, inline=False, **conv_kwargs):
+        super().__init__()
+        self.conv1 = TsaG2GConvL2LFFC_BN_ACT(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
+                                norm_layer=norm_layer,
+                                activation_layer=activation_layer,
+                                padding_type=padding_type,
+                                **conv_kwargs)
+        self.conv2 = TsaG2GConvL2LFFC_BN_ACT(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
+                                norm_layer=norm_layer,
+                                activation_layer=activation_layer,
+                                padding_type=padding_type,
+                                **conv_kwargs)
+        if spatial_transform_kwargs is not None:
+            self.conv1 = LearnableSpatialTransformWrapper(self.conv1, **spatial_transform_kwargs)
+            self.conv2 = LearnableSpatialTransformWrapper(self.conv2, **spatial_transform_kwargs)
+        self.inline = inline
+
+    def forward(self, x):
+        if self.inline:
+            x_l, x_g = x[:, :-self.conv1.ffc.global_in_num], x[:, -self.conv1.ffc.global_in_num:]
+        else:
+            x_l, x_g = x if type(x) is tuple else (x, 0)
+
+        id_l, id_g = x_l, x_g
+
+        x_l, x_g = self.conv1((x_l, x_g))
+        x_l, x_g = self.conv2((x_l, x_g))
+
+        x_l, x_g = id_l + x_l, id_g + x_g
+        out = x_l, x_g
+        if self.inline:
+            out = torch.cat(out, dim=1)
+        return out
+
+class TsaG2GConvL2LFFCResNetGenerator(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d,
+                 padding_type='reflect', activation_layer=nn.ReLU,
+                 up_norm_layer=nn.BatchNorm2d, up_activation=nn.ReLU(True),
+                 init_conv_kwargs={}, downsample_conv_kwargs={}, resnet_conv_kwargs={},
+                 spatial_transform_layers=None, spatial_transform_kwargs={},
+                 add_out_act=True, max_features=1024, out_ffc=False, out_ffc_kwargs={}):
+        assert (n_blocks >= 0)
+        super().__init__()
+
+        model = [nn.ReflectionPad2d(3),
+                 FFC_BN_ACT(input_nc, ngf, kernel_size=7, padding=0, norm_layer=norm_layer,
+                            activation_layer=activation_layer, **init_conv_kwargs)]
+
+        ### downsample
+        for i in range(n_downsampling):
+            mult = 2 ** i
+            if i == n_downsampling - 1:
+                cur_conv_kwargs = dict(downsample_conv_kwargs)
+                cur_conv_kwargs['ratio_gout'] = resnet_conv_kwargs.get('ratio_gin', 0)
+            else:
+                cur_conv_kwargs = downsample_conv_kwargs
+            model += [FFC_BN_ACT(min(max_features, ngf * mult),
+                                 min(max_features, ngf * mult * 2),
+                                 kernel_size=3, stride=2, padding=1,
+                                 norm_layer=norm_layer,
+                                 activation_layer=activation_layer,
+                                 **cur_conv_kwargs)]
+
+        mult = 2 ** n_downsampling
+        feats_num_bottleneck = min(max_features, ngf * mult)
+
+        ### resnet blocks
+        for i in range(n_blocks):
+            cur_resblock = TsaG2GConvL2LFFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            model += [cur_resblock]
+
+        model += [ConcatTupleLayer()]
+
+        ### upsample
+        for i in range(n_downsampling):
+            mult = 2 ** (n_downsampling - i)
+            model += [nn.ConvTranspose2d(min(max_features, ngf * mult),
+                                         min(max_features, int(ngf * mult / 2)),
+                                         kernel_size=3, stride=2, padding=1, output_padding=1),
+                      up_norm_layer(min(max_features, int(ngf * mult / 2))),
+                      up_activation]
+
+        if out_ffc:
+            model += [TsaG2GConvL2LFFCResnetBlock(ngf, padding_type=padding_type, activation_layer=activation_layer,
+                                     norm_layer=norm_layer, inline=True, **out_ffc_kwargs)]
+
+        model += [nn.ReflectionPad2d(3),
+                  nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        if add_out_act:
+            model.append(get_activation('tanh' if add_out_act is True else add_out_act))
+        self.model = nn.Sequential(*model)
+
+        # self.pa = pa(feat_dim=4)
+
+    def forward(self, input, pa=False):
+        # if pa:
+        #     input = self.pa(input)
+        return self.model(input)
+
+class TsaG2GL2LFFC(nn.Module):
+
+    def __init__(self, in_channels, out_channels, kernel_size,
+                 ratio_gin, ratio_gout, stride=1, padding=0,
+                 dilation=1, groups=1, bias=False, enable_lfu=True,
+                 padding_type='reflect', gated=False, **spectral_kwargs):
+        super(TsaG2GL2LFFC, self).__init__()
+
+        assert stride == 1 or stride == 2, "Stride should be 1 or 2."
+        self.stride = stride
+
+        in_cg = int(in_channels * ratio_gin)
+        in_cl = in_channels - in_cg
+        out_cg = int(out_channels * ratio_gout)
+        out_cl = out_channels - out_cg
+        #groups_g = 1 if groups == 1 else int(groups * ratio_gout)
+        #groups_l = 1 if groups == 1 else groups - groups_g
+
+        self.ratio_gin = ratio_gin
+        self.ratio_gout = ratio_gout
+        self.global_in_num = in_cg
+
+        module = nn.Identity if in_cl == 0 or out_cl == 0 else nn.Conv2d
+        self.convl2l = module(in_cl, out_cl, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cl == 0 or out_cg == 0 else nn.Conv2d
+        self.convl2g = module(in_cl, out_cg, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cg == 0 or out_cl == 0 else nn.Conv2d
+        self.convg2l = module(in_cg, out_cl, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cg == 0 or out_cg == 0 else SpectralTransform
+        self.convg2g = module(
+            in_cg, out_cg, stride, 1 if groups == 1 else groups // 2, enable_lfu, **spectral_kwargs)
+
+        self.gated = gated
+        module = nn.Identity if in_cg == 0 or out_cl == 0 or not self.gated else nn.Conv2d
+        self.gate = module(in_channels, 2, 1)
+
+        module = nn.Identity if in_cg == 0 or out_cg == 0 else SpectralTransform
+        self.convg2g_alpha = module(
+            in_cg, out_cg, stride, 1 if groups == 1 else groups // 2, enable_lfu, **spectral_kwargs)
+
+        self.convl2l_alpha = nn.Parameter(torch.ones(out_cl, in_cl, 1, 1))
+        self.convl2l_alpha.requires_grad = True
+        
+
+    def forward(self, x):
+        x_l, x_g = x if type(x) is tuple else (x, 0)
+        out_xl, out_xg = 0, 0
+
+        if self.gated:
+            total_input_parts = [x_l]
+            if torch.is_tensor(x_g):
+                total_input_parts.append(x_g)
+            total_input = torch.cat(total_input_parts, dim=1)
+
+            gates = torch.sigmoid(self.gate(total_input))
+            g2l_gate, l2g_gate = gates.chunk(2, dim=1)
+        else:
+            g2l_gate, l2g_gate = 1, 1
+
+        if self.ratio_gout != 1:
+            tas_convl2l = self.convl2l(x_l) + F.conv2d(x_l, self.convl2l_alpha, stride=self.convl2l.stride)
+            out_xl = tas_convl2l + self.convg2l(x_g) * g2l_gate
+        if self.ratio_gout != 0:
+            out_xg = self.convl2g(x_l) * l2g_gate + self.convg2g(x_g) + self.convg2g_alpha(x_g)        
+
+        return out_xl, out_xg
+
+class TsaG2GL2GFFC(nn.Module):
+
+    def __init__(self, in_channels, out_channels, kernel_size,
+                 ratio_gin, ratio_gout, stride=1, padding=0,
+                 dilation=1, groups=1, bias=False, enable_lfu=True,
+                 padding_type='reflect', gated=False, **spectral_kwargs):
+        super(TsaG2GL2GFFC, self).__init__()
+
+        assert stride == 1 or stride == 2, "Stride should be 1 or 2."
+        self.stride = stride
+
+        in_cg = int(in_channels * ratio_gin)
+        in_cl = in_channels - in_cg
+        out_cg = int(out_channels * ratio_gout)
+        out_cl = out_channels - out_cg
+        #groups_g = 1 if groups == 1 else int(groups * ratio_gout)
+        #groups_l = 1 if groups == 1 else groups - groups_g
+
+        self.ratio_gin = ratio_gin
+        self.ratio_gout = ratio_gout
+        self.global_in_num = in_cg
+
+        module = nn.Identity if in_cl == 0 or out_cl == 0 else nn.Conv2d
+        self.convl2l = module(in_cl, out_cl, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cl == 0 or out_cg == 0 else nn.Conv2d
+        self.convl2g = module(in_cl, out_cg, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cg == 0 or out_cl == 0 else nn.Conv2d
+        self.convg2l = module(in_cg, out_cl, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cg == 0 or out_cg == 0 else SpectralTransform
+        self.convg2g = module(
+            in_cg, out_cg, stride, 1 if groups == 1 else groups // 2, enable_lfu, **spectral_kwargs)
+
+        self.gated = gated
+        module = nn.Identity if in_cg == 0 or out_cl == 0 or not self.gated else nn.Conv2d
+        self.gate = module(in_channels, 2, 1)
+
+        module = nn.Identity if in_cg == 0 or out_cg == 0 else SpectralTransform
+        self.convg2g_alpha = module(
+            in_cg, out_cg, stride, 1 if groups == 1 else groups // 2, enable_lfu, **spectral_kwargs)
+
+        self.convl2g_alpha = nn.Parameter(torch.ones(out_cg, in_cl, 1, 1))
+        self.convl2g_alpha.requires_grad = True
+        
+
+    def forward(self, x):
+        x_l, x_g = x if type(x) is tuple else (x, 0)
+        out_xl, out_xg = 0, 0
+
+        if self.gated:
+            total_input_parts = [x_l]
+            if torch.is_tensor(x_g):
+                total_input_parts.append(x_g)
+            total_input = torch.cat(total_input_parts, dim=1)
+
+            gates = torch.sigmoid(self.gate(total_input))
+            g2l_gate, l2g_gate = gates.chunk(2, dim=1)
+        else:
+            g2l_gate, l2g_gate = 1, 1
+
+        if self.ratio_gout != 1:
+            out_xl = self.convl2l(x_l) + self.convg2l(x_g) * g2l_gate
+        if self.ratio_gout != 0:
+            tsa_convl2g = self.convl2g(x_l) + F.conv2d(x_l, self.convl2g_alpha, stride=self.convl2g.stride)
+            out_xg = tsa_convl2g * l2g_gate + self.convg2g(x_g) + self.convg2g_alpha(x_g)        
+
+        return out_xl, out_xg
+
+class TsaG2GFFC(nn.Module):
+
+    def __init__(self, in_channels, out_channels, kernel_size,
+                 ratio_gin, ratio_gout, stride=1, padding=0,
+                 dilation=1, groups=1, bias=False, enable_lfu=True,
+                 padding_type='reflect', gated=False, **spectral_kwargs):
+        super(TsaG2GFFC, self).__init__()
+
+        assert stride == 1 or stride == 2, "Stride should be 1 or 2."
+        self.stride = stride
+
+        in_cg = int(in_channels * ratio_gin)
+        in_cl = in_channels - in_cg
+        out_cg = int(out_channels * ratio_gout)
+        out_cl = out_channels - out_cg
+        #groups_g = 1 if groups == 1 else int(groups * ratio_gout)
+        #groups_l = 1 if groups == 1 else groups - groups_g
+
+        self.ratio_gin = ratio_gin
+        self.ratio_gout = ratio_gout
+        self.global_in_num = in_cg
+
+        module = nn.Identity if in_cl == 0 or out_cl == 0 else nn.Conv2d
+        self.convl2l = module(in_cl, out_cl, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cl == 0 or out_cg == 0 else nn.Conv2d
+        self.convl2g = module(in_cl, out_cg, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cg == 0 or out_cl == 0 else nn.Conv2d
+        self.convg2l = module(in_cg, out_cl, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cg == 0 or out_cg == 0 else SpectralTransform
+        self.convg2g = module(
+            in_cg, out_cg, stride, 1 if groups == 1 else groups // 2, enable_lfu, **spectral_kwargs)
+
+        self.gated = gated
+        module = nn.Identity if in_cg == 0 or out_cl == 0 or not self.gated else nn.Conv2d
+        self.gate = module(in_channels, 2, 1)
+
+        module = nn.Identity if in_cg == 0 or out_cg == 0 else SpectralTransform
+        self.convg2g_alpha = module(
+            in_cg, out_cg, stride, 1 if groups == 1 else groups // 2, enable_lfu, **spectral_kwargs)
+        
+
+    def forward(self, x):
+        x_l, x_g = x if type(x) is tuple else (x, 0)
+        out_xl, out_xg = 0, 0
+
+        if self.gated:
+            total_input_parts = [x_l]
+            if torch.is_tensor(x_g):
+                total_input_parts.append(x_g)
+            total_input = torch.cat(total_input_parts, dim=1)
+
+            gates = torch.sigmoid(self.gate(total_input))
+            g2l_gate, l2g_gate = gates.chunk(2, dim=1)
+        else:
+            g2l_gate, l2g_gate = 1, 1
+
+        if self.ratio_gout != 1:
+            out_xl = self.convl2l(x_l) + self.convg2l(x_g) * g2l_gate
+        if self.ratio_gout != 0:
+            out_xg = self.convl2g(x_l) * l2g_gate + self.convg2g(x_g) + self.convg2g_alpha(x_g)        
+
+        return out_xl, out_xg
+
+class TsaOneFFC(nn.Module):
+
+    def __init__(self, in_channels, out_channels, kernel_size,
+                 ratio_gin, ratio_gout, stride=1, padding=0,
+                 dilation=1, groups=1, bias=False, enable_lfu=True,
+                 padding_type='reflect', gated=False, **spectral_kwargs):
+        super(TsaOneFFC, self).__init__()
+
+        assert stride == 1 or stride == 2, "Stride should be 1 or 2."
+        self.stride = stride
+
+        in_cg = int(in_channels * ratio_gin)
+        in_cl = in_channels - in_cg
+        out_cg = int(out_channels * ratio_gout)
+        out_cl = out_channels - out_cg
+        #groups_g = 1 if groups == 1 else int(groups * ratio_gout)
+        #groups_l = 1 if groups == 1 else groups - groups_g
+
+        self.ratio_gin = ratio_gin
+        self.ratio_gout = ratio_gout
+        self.global_in_num = in_cg
+
+        module = nn.Identity if in_cl == 0 or out_cl == 0 else nn.Conv2d
+        self.convl2l = module(in_cl, out_cl, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cl == 0 or out_cg == 0 else nn.Conv2d
+        self.convl2g = module(in_cl, out_cg, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cg == 0 or out_cl == 0 else nn.Conv2d
+        self.convg2l = module(in_cg, out_cl, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cg == 0 or out_cg == 0 else SpectralTransform
+        self.convg2g = module(
+            in_cg, out_cg, stride, 1 if groups == 1 else groups // 2, enable_lfu, **spectral_kwargs)
+
+        self.gated = gated
+        module = nn.Identity if in_cg == 0 or out_cl == 0 or not self.gated else nn.Conv2d
+        self.gate = module(in_channels, 2, 1)
+
+        # self.sepc_trans_alpha = nn.Parameter(torch.ones(out_cg, in_cg, 1, 1))
+        # self.sepc_trans_alpha.requires_grad = True
+
+        self.global_alpha = nn.Parameter(torch.ones(out_cg, in_cg, 1, 1))
+        self.global_alpha.requires_grad = True
+        
+
+    def forward(self, x):
+        x_l, x_g = x if type(x) is tuple else (x, 0)
+        out_xl, out_xg = 0, 0
+
+        if self.gated:
+            total_input_parts = [x_l]
+            if torch.is_tensor(x_g):
+                total_input_parts.append(x_g)
+            total_input = torch.cat(total_input_parts, dim=1)
+
+            gates = torch.sigmoid(self.gate(total_input))
+            g2l_gate, l2g_gate = gates.chunk(2, dim=1)
+        else:
+            g2l_gate, l2g_gate = 1, 1
+
+        if self.ratio_gout != 1:
+            out_xl = self.convl2l(x_l) + self.convg2l(x_g) * g2l_gate
+        if self.ratio_gout != 0:
+            out_xg = self.convl2g(x_l) * l2g_gate + self.convg2g(x_g)
+            out_xg = out_xg + F.conv2d(x_g, self.global_alpha, stride=self.convg2g.stride)
+            # out_g2g = self.convg2g(x_g)
+            # out_xg = self.convl2g(x_l) * l2g_gate + out_g2g + F.conv2d(out_g2g, self.sepc_trans_alpha, stride=self.convg2g.stride)
+        
+
+        return out_xl, out_xg
+
+class TsaTwoFFC(nn.Module):
+
+    def __init__(self, in_channels, out_channels, kernel_size,
+                 ratio_gin, ratio_gout, stride=1, padding=0,
+                 dilation=1, groups=1, bias=False, enable_lfu=True,
+                 padding_type='reflect', gated=False, **spectral_kwargs):
+        super(TsaTwoFFC, self).__init__()
+
+        assert stride == 1 or stride == 2, "Stride should be 1 or 2."
+        self.stride = stride
+
+        in_cg = int(in_channels * ratio_gin)
+        in_cl = in_channels - in_cg
+        out_cg = int(out_channels * ratio_gout)
+        out_cl = out_channels - out_cg
+        #groups_g = 1 if groups == 1 else int(groups * ratio_gout)
+        #groups_l = 1 if groups == 1 else groups - groups_g
+
+        self.ratio_gin = ratio_gin
+        self.ratio_gout = ratio_gout
+        self.global_in_num = in_cg
+
+        module = nn.Identity if in_cl == 0 or out_cl == 0 else nn.Conv2d
+        self.convl2l = module(in_cl, out_cl, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cl == 0 or out_cg == 0 else nn.Conv2d
+        self.convl2g = module(in_cl, out_cg, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cg == 0 or out_cl == 0 else nn.Conv2d
+        self.convg2l = module(in_cg, out_cl, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cg == 0 or out_cg == 0 else SpectralTransform
+        self.convg2g = module(
+            in_cg, out_cg, stride, 1 if groups == 1 else groups // 2, enable_lfu, **spectral_kwargs)
+
+        self.gated = gated
+        module = nn.Identity if in_cg == 0 or out_cl == 0 or not self.gated else nn.Conv2d
+        self.gate = module(in_channels, 2, 1)
+
+        self.local_alpha = nn.Parameter(torch.ones(out_cl, in_cl, 1, 1))
+        self.local_alpha.requires_grad = True
+        self.global_alpha = nn.Parameter(torch.ones(out_cg, in_cg, 1, 1))
+        self.global_alpha.requires_grad = True
+        
+
+    def forward(self, x):
+        x_l, x_g = x if type(x) is tuple else (x, 0)
+        out_xl, out_xg = 0, 0
+
+        if self.gated:
+            total_input_parts = [x_l]
+            if torch.is_tensor(x_g):
+                total_input_parts.append(x_g)
+            total_input = torch.cat(total_input_parts, dim=1)
+
+            gates = torch.sigmoid(self.gate(total_input))
+            g2l_gate, l2g_gate = gates.chunk(2, dim=1)
+        else:
+            g2l_gate, l2g_gate = 1, 1
+
+        if self.ratio_gout != 1:
+            out_xl = self.convl2l(x_l) + self.convg2l(x_g) * g2l_gate
+            out_xl = out_xl + F.conv2d(x_l, self.local_alpha, stride=self.convl2l.stride)
+        if self.ratio_gout != 0:
+            out_xg = self.convl2g(x_l) * l2g_gate + self.convg2g(x_g)
+            out_xg = out_xg + F.conv2d(x_g, self.global_alpha, stride=self.convg2g.stride)
+        
+
+        return out_xl, out_xg
+
+class TsaFFC(nn.Module):
+
+    def __init__(self, in_channels, out_channels, kernel_size,
+                 ratio_gin, ratio_gout, stride=1, padding=0,
+                 dilation=1, groups=1, bias=False, enable_lfu=True,
+                 padding_type='reflect', gated=False, **spectral_kwargs):
+        super(TsaFFC, self).__init__()
+
+        assert stride == 1 or stride == 2, "Stride should be 1 or 2."
+        self.stride = stride
+
+        in_cg = int(in_channels * ratio_gin)
+        in_cl = in_channels - in_cg
+        out_cg = int(out_channels * ratio_gout)
+        out_cl = out_channels - out_cg
+        #groups_g = 1 if groups == 1 else int(groups * ratio_gout)
+        #groups_l = 1 if groups == 1 else groups - groups_g
+
+        self.ratio_gin = ratio_gin
+        self.ratio_gout = ratio_gout
+        self.global_in_num = in_cg
+
+        module = nn.Identity if in_cl == 0 or out_cl == 0 else nn.Conv2d
+        self.convl2l = module(in_cl, out_cl, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cl == 0 or out_cg == 0 else nn.Conv2d
+        self.convl2g = module(in_cl, out_cg, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cg == 0 or out_cl == 0 else nn.Conv2d
+        self.convg2l = module(in_cg, out_cl, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cg == 0 or out_cg == 0 else SpectralTransform
+        self.convg2g = module(
+            in_cg, out_cg, stride, 1 if groups == 1 else groups // 2, enable_lfu, **spectral_kwargs)
+
+        self.gated = gated
+        module = nn.Identity if in_cg == 0 or out_cl == 0 or not self.gated else nn.Conv2d
+        self.gate = module(in_channels, 2, 1)
+
+        self.convl2l_alpha = nn.Parameter(torch.ones(out_cl, in_cl, 1, 1))
+        self.convl2l_alpha.requires_grad = True
+        self.convl2g_alpha = nn.Parameter(torch.ones(out_cg, in_cl, 1, 1))
+        self.convl2g_alpha.requires_grad = True
+        self.convg2l_alpha = nn.Parameter(torch.ones(out_cl, in_cg, 1, 1))
+        self.convg2l_alpha.requires_grad = True
+        self.convg2g_alpha = nn.Parameter(torch.ones(out_cg, in_cg, 1, 1))
+        self.convg2g_alpha.requires_grad = True
+
+        
+
+    def forward(self, x):
+        x_l, x_g = x if type(x) is tuple else (x, 0)
+        out_xl, out_xg = 0, 0
+
+        if self.gated:
+            total_input_parts = [x_l]
+            if torch.is_tensor(x_g):
+                total_input_parts.append(x_g)
+            total_input = torch.cat(total_input_parts, dim=1)
+
+            gates = torch.sigmoid(self.gate(total_input))
+            g2l_gate, l2g_gate = gates.chunk(2, dim=1)
+        else:
+            g2l_gate, l2g_gate = 1, 1
+
+        if self.ratio_gout != 1:
+            tsa_convl2l = self.convl2l(x_l) + F.conv2d(x_l, self.convl2l_alpha, stride=self.convl2l.stride)
+            tsa_convg2l = self.convg2l(x_g) + F.conv2d(x_g, self.convg2l_alpha, stride=self.convg2l.stride)
+            out_xl = tsa_convl2l + tsa_convg2l * g2l_gate
+        if self.ratio_gout != 0:
+            tsa_convl2g = self.convl2g(x_l) + F.conv2d(x_l, self.convl2g_alpha, stride=self.convl2g.stride)
+            tsa_convg2g = self.convg2g(x_g) + F.conv2d(x_g, self.convg2g_alpha, stride=self.convg2g.stride)
+            out_xg = tsa_convl2g * l2g_gate + tsa_convg2g
+
+        return out_xl, out_xg
+
+class TsaG2GL2LFFC_BN_ACT(nn.Module):
+
+    def __init__(self, in_channels, out_channels,
+                 kernel_size, ratio_gin, ratio_gout,
+                 stride=1, padding=0, dilation=1, groups=1, bias=False,
+                 norm_layer=nn.BatchNorm2d, activation_layer=nn.Identity,
+                 padding_type='reflect',
+                 enable_lfu=True, **kwargs):
+        super(TsaG2GL2LFFC_BN_ACT, self).__init__()
+        self.ffc = TsaG2GL2LFFC(in_channels, out_channels, kernel_size,
+                       ratio_gin, ratio_gout, stride, padding, dilation,
+                       groups, bias, enable_lfu, padding_type=padding_type, **kwargs)
+        lnorm = nn.Identity if ratio_gout == 1 else norm_layer
+        gnorm = nn.Identity if ratio_gout == 0 else norm_layer
+        global_channels = int(out_channels * ratio_gout)
+        self.bn_l = lnorm(out_channels - global_channels)
+        self.bn_g = gnorm(global_channels)
+
+        lact = nn.Identity if ratio_gout == 1 else activation_layer
+        gact = nn.Identity if ratio_gout == 0 else activation_layer
+        self.act_l = lact(inplace=True)
+        self.act_g = gact(inplace=True)
+
+    def forward(self, x):
+        x_l, x_g = self.ffc(x)
+        x_l = self.act_l(self.bn_l(x_l))
+        x_g = self.act_g(self.bn_g(x_g))
+        return x_l, x_g
+
+class TsaG2GL2GFFC_BN_ACT(nn.Module):
+
+    def __init__(self, in_channels, out_channels,
+                 kernel_size, ratio_gin, ratio_gout,
+                 stride=1, padding=0, dilation=1, groups=1, bias=False,
+                 norm_layer=nn.BatchNorm2d, activation_layer=nn.Identity,
+                 padding_type='reflect',
+                 enable_lfu=True, **kwargs):
+        super(TsaG2GL2GFFC_BN_ACT, self).__init__()
+        self.ffc = TsaG2GL2GFFC(in_channels, out_channels, kernel_size,
+                       ratio_gin, ratio_gout, stride, padding, dilation,
+                       groups, bias, enable_lfu, padding_type=padding_type, **kwargs)
+        lnorm = nn.Identity if ratio_gout == 1 else norm_layer
+        gnorm = nn.Identity if ratio_gout == 0 else norm_layer
+        global_channels = int(out_channels * ratio_gout)
+        self.bn_l = lnorm(out_channels - global_channels)
+        self.bn_g = gnorm(global_channels)
+
+        lact = nn.Identity if ratio_gout == 1 else activation_layer
+        gact = nn.Identity if ratio_gout == 0 else activation_layer
+        self.act_l = lact(inplace=True)
+        self.act_g = gact(inplace=True)
+
+    def forward(self, x):
+        x_l, x_g = self.ffc(x)
+        x_l = self.act_l(self.bn_l(x_l))
+        x_g = self.act_g(self.bn_g(x_g))
+        return x_l, x_g
+
+class TsaG2GFFC_BN_ACT(nn.Module):
+
+    def __init__(self, in_channels, out_channels,
+                 kernel_size, ratio_gin, ratio_gout,
+                 stride=1, padding=0, dilation=1, groups=1, bias=False,
+                 norm_layer=nn.BatchNorm2d, activation_layer=nn.Identity,
+                 padding_type='reflect',
+                 enable_lfu=True, **kwargs):
+        super(TsaG2GFFC_BN_ACT, self).__init__()
+        self.ffc = TsaG2GFFC(in_channels, out_channels, kernel_size,
+                       ratio_gin, ratio_gout, stride, padding, dilation,
+                       groups, bias, enable_lfu, padding_type=padding_type, **kwargs)
+        lnorm = nn.Identity if ratio_gout == 1 else norm_layer
+        gnorm = nn.Identity if ratio_gout == 0 else norm_layer
+        global_channels = int(out_channels * ratio_gout)
+        self.bn_l = lnorm(out_channels - global_channels)
+        self.bn_g = gnorm(global_channels)
+
+        lact = nn.Identity if ratio_gout == 1 else activation_layer
+        gact = nn.Identity if ratio_gout == 0 else activation_layer
+        self.act_l = lact(inplace=True)
+        self.act_g = gact(inplace=True)
+
+    def forward(self, x):
+        x_l, x_g = self.ffc(x)
+        x_l = self.act_l(self.bn_l(x_l))
+        x_g = self.act_g(self.bn_g(x_g))
+        return x_l, x_g
+
+class TsaOneFFC_BN_ACT(nn.Module):
+
+    def __init__(self, in_channels, out_channels,
+                 kernel_size, ratio_gin, ratio_gout,
+                 stride=1, padding=0, dilation=1, groups=1, bias=False,
+                 norm_layer=nn.BatchNorm2d, activation_layer=nn.Identity,
+                 padding_type='reflect',
+                 enable_lfu=True, **kwargs):
+        super(TsaOneFFC_BN_ACT, self).__init__()
+        self.ffc = TsaOneFFC(in_channels, out_channels, kernel_size,
+                       ratio_gin, ratio_gout, stride, padding, dilation,
+                       groups, bias, enable_lfu, padding_type=padding_type, **kwargs)
+        lnorm = nn.Identity if ratio_gout == 1 else norm_layer
+        gnorm = nn.Identity if ratio_gout == 0 else norm_layer
+        global_channels = int(out_channels * ratio_gout)
+        self.bn_l = lnorm(out_channels - global_channels)
+        self.bn_g = gnorm(global_channels)
+
+        lact = nn.Identity if ratio_gout == 1 else activation_layer
+        gact = nn.Identity if ratio_gout == 0 else activation_layer
+        self.act_l = lact(inplace=True)
+        self.act_g = gact(inplace=True)
+
+    def forward(self, x):
+        x_l, x_g = self.ffc(x)
+        x_l = self.act_l(self.bn_l(x_l))
+        x_g = self.act_g(self.bn_g(x_g))
+        return x_l, x_g
+
+class TsaTwoFFC_BN_ACT(nn.Module):
+
+    def __init__(self, in_channels, out_channels,
+                 kernel_size, ratio_gin, ratio_gout,
+                 stride=1, padding=0, dilation=1, groups=1, bias=False,
+                 norm_layer=nn.BatchNorm2d, activation_layer=nn.Identity,
+                 padding_type='reflect',
+                 enable_lfu=True, **kwargs):
+        super(TsaTwoFFC_BN_ACT, self).__init__()
+        self.ffc = TsaTwoFFC(in_channels, out_channels, kernel_size,
+                       ratio_gin, ratio_gout, stride, padding, dilation,
+                       groups, bias, enable_lfu, padding_type=padding_type, **kwargs)
+        lnorm = nn.Identity if ratio_gout == 1 else norm_layer
+        gnorm = nn.Identity if ratio_gout == 0 else norm_layer
+        global_channels = int(out_channels * ratio_gout)
+        self.bn_l = lnorm(out_channels - global_channels)
+        self.bn_g = gnorm(global_channels)
+
+        lact = nn.Identity if ratio_gout == 1 else activation_layer
+        gact = nn.Identity if ratio_gout == 0 else activation_layer
+        self.act_l = lact(inplace=True)
+        self.act_g = gact(inplace=True)
+
+    def forward(self, x):
+        x_l, x_g = self.ffc(x)
+        x_l = self.act_l(self.bn_l(x_l))
+        x_g = self.act_g(self.bn_g(x_g))
+        return x_l, x_g
+
+class TsaFFC_BN_ACT(nn.Module):
+
+    def __init__(self, in_channels, out_channels,
+                 kernel_size, ratio_gin, ratio_gout,
+                 stride=1, padding=0, dilation=1, groups=1, bias=False,
+                 norm_layer=nn.BatchNorm2d, activation_layer=nn.Identity,
+                 padding_type='reflect',
+                 enable_lfu=True, **kwargs):
+        super(TsaFFC_BN_ACT, self).__init__()
+        self.ffc = TsaFFC(in_channels, out_channels, kernel_size,
+                       ratio_gin, ratio_gout, stride, padding, dilation,
+                       groups, bias, enable_lfu, padding_type=padding_type, **kwargs)
+        lnorm = nn.Identity if ratio_gout == 1 else norm_layer
+        gnorm = nn.Identity if ratio_gout == 0 else norm_layer
+        global_channels = int(out_channels * ratio_gout)
+        self.bn_l = lnorm(out_channels - global_channels)
+        self.bn_g = gnorm(global_channels)
+
+        lact = nn.Identity if ratio_gout == 1 else activation_layer
+        gact = nn.Identity if ratio_gout == 0 else activation_layer
+        self.act_l = lact(inplace=True)
+        self.act_g = gact(inplace=True)
+
+    def forward(self, x):
+        x_l, x_g = self.ffc(x)
+        x_l = self.act_l(self.bn_l(x_l))
+        x_g = self.act_g(self.bn_g(x_g))
+        return x_l, x_g
+
+class TsaG2GL2LFFCResnetBlock(nn.Module):
+    def __init__(self, dim, padding_type, norm_layer, activation_layer=nn.ReLU, dilation=1,
+                 spatial_transform_kwargs=None, inline=False, **conv_kwargs):
+        super().__init__()
+        self.conv1 = TsaG2GL2LFFC_BN_ACT(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
+                                norm_layer=norm_layer,
+                                activation_layer=activation_layer,
+                                padding_type=padding_type,
+                                **conv_kwargs)
+        self.conv2 = TsaG2GL2LFFC_BN_ACT(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
+                                norm_layer=norm_layer,
+                                activation_layer=activation_layer,
+                                padding_type=padding_type,
+                                **conv_kwargs)
+        if spatial_transform_kwargs is not None:
+            self.conv1 = LearnableSpatialTransformWrapper(self.conv1, **spatial_transform_kwargs)
+            self.conv2 = LearnableSpatialTransformWrapper(self.conv2, **spatial_transform_kwargs)
+        self.inline = inline
+
+    def forward(self, x):
+        if self.inline:
+            x_l, x_g = x[:, :-self.conv1.ffc.global_in_num], x[:, -self.conv1.ffc.global_in_num:]
+        else:
+            x_l, x_g = x if type(x) is tuple else (x, 0)
+
+        id_l, id_g = x_l, x_g
+
+        x_l, x_g = self.conv1((x_l, x_g))
+        x_l, x_g = self.conv2((x_l, x_g))
+
+        x_l, x_g = id_l + x_l, id_g + x_g
+        out = x_l, x_g
+        if self.inline:
+            out = torch.cat(out, dim=1)
+        return out
+
+class TsaG2GL2GFFCResnetBlock(nn.Module):
+    def __init__(self, dim, padding_type, norm_layer, activation_layer=nn.ReLU, dilation=1,
+                 spatial_transform_kwargs=None, inline=False, **conv_kwargs):
+        super().__init__()
+        self.conv1 = TsaG2GL2GFFC_BN_ACT(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
+                                norm_layer=norm_layer,
+                                activation_layer=activation_layer,
+                                padding_type=padding_type,
+                                **conv_kwargs)
+        self.conv2 = TsaG2GL2GFFC_BN_ACT(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
+                                norm_layer=norm_layer,
+                                activation_layer=activation_layer,
+                                padding_type=padding_type,
+                                **conv_kwargs)
+        if spatial_transform_kwargs is not None:
+            self.conv1 = LearnableSpatialTransformWrapper(self.conv1, **spatial_transform_kwargs)
+            self.conv2 = LearnableSpatialTransformWrapper(self.conv2, **spatial_transform_kwargs)
+        self.inline = inline
+
+    def forward(self, x):
+        if self.inline:
+            x_l, x_g = x[:, :-self.conv1.ffc.global_in_num], x[:, -self.conv1.ffc.global_in_num:]
+        else:
+            x_l, x_g = x if type(x) is tuple else (x, 0)
+
+        id_l, id_g = x_l, x_g
+
+        x_l, x_g = self.conv1((x_l, x_g))
+        x_l, x_g = self.conv2((x_l, x_g))
+
+        x_l, x_g = id_l + x_l, id_g + x_g
+        out = x_l, x_g
+        if self.inline:
+            out = torch.cat(out, dim=1)
+        return out
+
+class TsaG2GFFCResnetBlock(nn.Module):
+    def __init__(self, dim, padding_type, norm_layer, activation_layer=nn.ReLU, dilation=1,
+                 spatial_transform_kwargs=None, inline=False, **conv_kwargs):
+        super().__init__()
+        self.conv1 = TsaG2GFFC_BN_ACT(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
+                                norm_layer=norm_layer,
+                                activation_layer=activation_layer,
+                                padding_type=padding_type,
+                                **conv_kwargs)
+        self.conv2 = TsaG2GFFC_BN_ACT(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
+                                norm_layer=norm_layer,
+                                activation_layer=activation_layer,
+                                padding_type=padding_type,
+                                **conv_kwargs)
+        if spatial_transform_kwargs is not None:
+            self.conv1 = LearnableSpatialTransformWrapper(self.conv1, **spatial_transform_kwargs)
+            self.conv2 = LearnableSpatialTransformWrapper(self.conv2, **spatial_transform_kwargs)
+        self.inline = inline
+
+    def forward(self, x):
+        if self.inline:
+            x_l, x_g = x[:, :-self.conv1.ffc.global_in_num], x[:, -self.conv1.ffc.global_in_num:]
+        else:
+            x_l, x_g = x if type(x) is tuple else (x, 0)
+
+        id_l, id_g = x_l, x_g
+
+        x_l, x_g = self.conv1((x_l, x_g))
+        x_l, x_g = self.conv2((x_l, x_g))
+
+        x_l, x_g = id_l + x_l, id_g + x_g
+        out = x_l, x_g
+        if self.inline:
+            out = torch.cat(out, dim=1)
+        return out
+
+
+class TsaOneFFCResnetBlock(nn.Module):
+    def __init__(self, dim, padding_type, norm_layer, activation_layer=nn.ReLU, dilation=1,
+                 spatial_transform_kwargs=None, inline=False, **conv_kwargs):
+        super().__init__()
+        self.conv1 = TsaOneFFC_BN_ACT(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
+                                norm_layer=norm_layer,
+                                activation_layer=activation_layer,
+                                padding_type=padding_type,
+                                **conv_kwargs)
+        self.conv2 = TsaOneFFC_BN_ACT(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
+                                norm_layer=norm_layer,
+                                activation_layer=activation_layer,
+                                padding_type=padding_type,
+                                **conv_kwargs)
+        if spatial_transform_kwargs is not None:
+            self.conv1 = LearnableSpatialTransformWrapper(self.conv1, **spatial_transform_kwargs)
+            self.conv2 = LearnableSpatialTransformWrapper(self.conv2, **spatial_transform_kwargs)
+        self.inline = inline
+
+    def forward(self, x):
+        if self.inline:
+            x_l, x_g = x[:, :-self.conv1.ffc.global_in_num], x[:, -self.conv1.ffc.global_in_num:]
+        else:
+            x_l, x_g = x if type(x) is tuple else (x, 0)
+
+        id_l, id_g = x_l, x_g
+
+        x_l, x_g = self.conv1((x_l, x_g))
+        x_l, x_g = self.conv2((x_l, x_g))
+
+        x_l, x_g = id_l + x_l, id_g + x_g
+        out = x_l, x_g
+        if self.inline:
+            out = torch.cat(out, dim=1)
+        return out
+
+class TsaTwoFFCResnetBlock(nn.Module):
+    def __init__(self, dim, padding_type, norm_layer, activation_layer=nn.ReLU, dilation=1,
+                 spatial_transform_kwargs=None, inline=False, **conv_kwargs):
+        super().__init__()
+        self.conv1 = TsaTwoFFC_BN_ACT(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
+                                norm_layer=norm_layer,
+                                activation_layer=activation_layer,
+                                padding_type=padding_type,
+                                **conv_kwargs)
+        self.conv2 = TsaTwoFFC_BN_ACT(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
+                                norm_layer=norm_layer,
+                                activation_layer=activation_layer,
+                                padding_type=padding_type,
+                                **conv_kwargs)
+        if spatial_transform_kwargs is not None:
+            self.conv1 = LearnableSpatialTransformWrapper(self.conv1, **spatial_transform_kwargs)
+            self.conv2 = LearnableSpatialTransformWrapper(self.conv2, **spatial_transform_kwargs)
+        self.inline = inline
+
+    def forward(self, x):
+        if self.inline:
+            x_l, x_g = x[:, :-self.conv1.ffc.global_in_num], x[:, -self.conv1.ffc.global_in_num:]
+        else:
+            x_l, x_g = x if type(x) is tuple else (x, 0)
+
+        id_l, id_g = x_l, x_g
+
+        x_l, x_g = self.conv1((x_l, x_g))
+        x_l, x_g = self.conv2((x_l, x_g))
+
+        x_l, x_g = id_l + x_l, id_g + x_g
+        out = x_l, x_g
+        if self.inline:
+            out = torch.cat(out, dim=1)
+        return out
+
+class TsaFFCResnetBlock(nn.Module):
+    def __init__(self, dim, padding_type, norm_layer, activation_layer=nn.ReLU, dilation=1,
+                 spatial_transform_kwargs=None, inline=False, **conv_kwargs):
+        super().__init__()
+        self.conv1 = TsaFFC_BN_ACT(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
+                                norm_layer=norm_layer,
+                                activation_layer=activation_layer,
+                                padding_type=padding_type,
+                                **conv_kwargs)
+        self.conv2 = TsaFFC_BN_ACT(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
+                                norm_layer=norm_layer,
+                                activation_layer=activation_layer,
+                                padding_type=padding_type,
+                                **conv_kwargs)
+        if spatial_transform_kwargs is not None:
+            self.conv1 = LearnableSpatialTransformWrapper(self.conv1, **spatial_transform_kwargs)
+            self.conv2 = LearnableSpatialTransformWrapper(self.conv2, **spatial_transform_kwargs)
+        self.inline = inline
+
+    def forward(self, x):
+        if self.inline:
+            x_l, x_g = x[:, :-self.conv1.ffc.global_in_num], x[:, -self.conv1.ffc.global_in_num:]
+        else:
+            x_l, x_g = x if type(x) is tuple else (x, 0)
+
+        id_l, id_g = x_l, x_g
+
+        x_l, x_g = self.conv1((x_l, x_g))
+        x_l, x_g = self.conv2((x_l, x_g))
+
+        x_l, x_g = id_l + x_l, id_g + x_g
+        out = x_l, x_g
+        if self.inline:
+            out = torch.cat(out, dim=1)
+        return out
+
+class pa(nn.Module):
+    """ 
+    pre-classifier alignment (PA) mapping from 'Universal Representation Learning from Multiple Domains for Few-shot Classification'
+    (https://arxiv.org/pdf/2103.13841.pdf)
+    """
+    def __init__(self, feat_dim):
+        super(pa, self).__init__()
+        # define pre-classifier alignment mapping
+        self.pa_weight = nn.Parameter(torch.ones(feat_dim, feat_dim, 1, 1))
+        self.pa_weight.requires_grad = False # Adjust during training
+
+    def forward(self, x):
+        if len(list(x.size())) == 2:
+            x = x.unsqueeze(-1).unsqueeze(-1)
+        x = F.conv2d(x, self.pa_weight.to(x.device))
+        return x
+
+class TsaG2GL2LFFCResNetGenerator(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d,
+                 padding_type='reflect', activation_layer=nn.ReLU,
+                 up_norm_layer=nn.BatchNorm2d, up_activation=nn.ReLU(True),
+                 init_conv_kwargs={}, downsample_conv_kwargs={}, resnet_conv_kwargs={},
+                 spatial_transform_layers=None, spatial_transform_kwargs={},
+                 add_out_act=True, max_features=1024, out_ffc=False, out_ffc_kwargs={}):
+        assert (n_blocks >= 0)
+        super().__init__()
+
+        model = [nn.ReflectionPad2d(3),
+                 FFC_BN_ACT(input_nc, ngf, kernel_size=7, padding=0, norm_layer=norm_layer,
+                            activation_layer=activation_layer, **init_conv_kwargs)]
+
+        ### downsample
+        for i in range(n_downsampling):
+            mult = 2 ** i
+            if i == n_downsampling - 1:
+                cur_conv_kwargs = dict(downsample_conv_kwargs)
+                cur_conv_kwargs['ratio_gout'] = resnet_conv_kwargs.get('ratio_gin', 0)
+            else:
+                cur_conv_kwargs = downsample_conv_kwargs
+            model += [FFC_BN_ACT(min(max_features, ngf * mult),
+                                 min(max_features, ngf * mult * 2),
+                                 kernel_size=3, stride=2, padding=1,
+                                 norm_layer=norm_layer,
+                                 activation_layer=activation_layer,
+                                 **cur_conv_kwargs)]
+
+        mult = 2 ** n_downsampling
+        feats_num_bottleneck = min(max_features, ngf * mult)
+
+        ### resnet blocks
+        for i in range(n_blocks):
+            cur_resblock = TsaG2GL2LFFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            model += [cur_resblock]
+
+        model += [ConcatTupleLayer()]
+
+        ### upsample
+        for i in range(n_downsampling):
+            mult = 2 ** (n_downsampling - i)
+            model += [nn.ConvTranspose2d(min(max_features, ngf * mult),
+                                         min(max_features, int(ngf * mult / 2)),
+                                         kernel_size=3, stride=2, padding=1, output_padding=1),
+                      up_norm_layer(min(max_features, int(ngf * mult / 2))),
+                      up_activation]
+
+        if out_ffc:
+            model += [TsaG2GL2LFFCResnetBlock(ngf, padding_type=padding_type, activation_layer=activation_layer,
+                                     norm_layer=norm_layer, inline=True, **out_ffc_kwargs)]
+
+        model += [nn.ReflectionPad2d(3),
+                  nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        if add_out_act:
+            model.append(get_activation('tanh' if add_out_act is True else add_out_act))
+        self.model = nn.Sequential(*model)
+
+        # self.pa = pa(feat_dim=4)
+
+    def forward(self, input, pa=False):
+        # if pa:
+        #     input = self.pa(input)
+        return self.model(input)
+
+class TsaG2GL2GFFCResNetGenerator(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d,
+                 padding_type='reflect', activation_layer=nn.ReLU,
+                 up_norm_layer=nn.BatchNorm2d, up_activation=nn.ReLU(True),
+                 init_conv_kwargs={}, downsample_conv_kwargs={}, resnet_conv_kwargs={},
+                 spatial_transform_layers=None, spatial_transform_kwargs={},
+                 add_out_act=True, max_features=1024, out_ffc=False, out_ffc_kwargs={}):
+        assert (n_blocks >= 0)
+        super().__init__()
+
+        model = [nn.ReflectionPad2d(3),
+                 FFC_BN_ACT(input_nc, ngf, kernel_size=7, padding=0, norm_layer=norm_layer,
+                            activation_layer=activation_layer, **init_conv_kwargs)]
+
+        ### downsample
+        for i in range(n_downsampling):
+            mult = 2 ** i
+            if i == n_downsampling - 1:
+                cur_conv_kwargs = dict(downsample_conv_kwargs)
+                cur_conv_kwargs['ratio_gout'] = resnet_conv_kwargs.get('ratio_gin', 0)
+            else:
+                cur_conv_kwargs = downsample_conv_kwargs
+            model += [FFC_BN_ACT(min(max_features, ngf * mult),
+                                 min(max_features, ngf * mult * 2),
+                                 kernel_size=3, stride=2, padding=1,
+                                 norm_layer=norm_layer,
+                                 activation_layer=activation_layer,
+                                 **cur_conv_kwargs)]
+
+        mult = 2 ** n_downsampling
+        feats_num_bottleneck = min(max_features, ngf * mult)
+
+        ### resnet blocks
+        for i in range(n_blocks):
+            cur_resblock = TsaG2GL2GFFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            model += [cur_resblock]
+
+        model += [ConcatTupleLayer()]
+
+        ### upsample
+        for i in range(n_downsampling):
+            mult = 2 ** (n_downsampling - i)
+            model += [nn.ConvTranspose2d(min(max_features, ngf * mult),
+                                         min(max_features, int(ngf * mult / 2)),
+                                         kernel_size=3, stride=2, padding=1, output_padding=1),
+                      up_norm_layer(min(max_features, int(ngf * mult / 2))),
+                      up_activation]
+
+        if out_ffc:
+            model += [TsaG2GL2GFFCResnetBlock(ngf, padding_type=padding_type, activation_layer=activation_layer,
+                                     norm_layer=norm_layer, inline=True, **out_ffc_kwargs)]
+
+        model += [nn.ReflectionPad2d(3),
+                  nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        if add_out_act:
+            model.append(get_activation('tanh' if add_out_act is True else add_out_act))
+        self.model = nn.Sequential(*model)
+
+        self.pa = pa(feat_dim=4)
+
+    def forward(self, input, pa=False):
+        if pa:
+            input = self.pa(input)
+        return self.model(input)
+
+class TsaG2GFFCResNetGenerator(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d,
+                 padding_type='reflect', activation_layer=nn.ReLU,
+                 up_norm_layer=nn.BatchNorm2d, up_activation=nn.ReLU(True),
+                 init_conv_kwargs={}, downsample_conv_kwargs={}, resnet_conv_kwargs={},
+                 spatial_transform_layers=None, spatial_transform_kwargs={},
+                 add_out_act=True, max_features=1024, out_ffc=False, out_ffc_kwargs={}):
+        assert (n_blocks >= 0)
+        super().__init__()
+
+        model = [nn.ReflectionPad2d(3),
+                 FFC_BN_ACT(input_nc, ngf, kernel_size=7, padding=0, norm_layer=norm_layer,
+                            activation_layer=activation_layer, **init_conv_kwargs)]
+
+        ### downsample
+        for i in range(n_downsampling):
+            mult = 2 ** i
+            if i == n_downsampling - 1:
+                cur_conv_kwargs = dict(downsample_conv_kwargs)
+                cur_conv_kwargs['ratio_gout'] = resnet_conv_kwargs.get('ratio_gin', 0)
+            else:
+                cur_conv_kwargs = downsample_conv_kwargs
+            model += [FFC_BN_ACT(min(max_features, ngf * mult),
+                                 min(max_features, ngf * mult * 2),
+                                 kernel_size=3, stride=2, padding=1,
+                                 norm_layer=norm_layer,
+                                 activation_layer=activation_layer,
+                                 **cur_conv_kwargs)]
+
+        mult = 2 ** n_downsampling
+        feats_num_bottleneck = min(max_features, ngf * mult)
+
+        ### resnet blocks
+        for i in range(n_blocks):
+            cur_resblock = TsaG2GFFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            model += [cur_resblock]
+
+        model += [ConcatTupleLayer()]
+
+        ### upsample
+        for i in range(n_downsampling):
+            mult = 2 ** (n_downsampling - i)
+            model += [nn.ConvTranspose2d(min(max_features, ngf * mult),
+                                         min(max_features, int(ngf * mult / 2)),
+                                         kernel_size=3, stride=2, padding=1, output_padding=1),
+                      up_norm_layer(min(max_features, int(ngf * mult / 2))),
+                      up_activation]
+
+        if out_ffc:
+            model += [TsaG2GFFCResnetBlock(ngf, padding_type=padding_type, activation_layer=activation_layer,
+                                     norm_layer=norm_layer, inline=True, **out_ffc_kwargs)]
+
+        model += [nn.ReflectionPad2d(3),
+                  nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        if add_out_act:
+            model.append(get_activation('tanh' if add_out_act is True else add_out_act))
+        self.model = nn.Sequential(*model)
+
+        # self.pa = pa(feat_dim=4)
+
+    def forward(self, input, pa=False):
+        # if pa:
+        #     input = self.pa(input)
+        return self.model(input)
+
+
+class TsaOneFFCResNetGenerator(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d,
+                 padding_type='reflect', activation_layer=nn.ReLU,
+                 up_norm_layer=nn.BatchNorm2d, up_activation=nn.ReLU(True),
+                 init_conv_kwargs={}, downsample_conv_kwargs={}, resnet_conv_kwargs={},
+                 spatial_transform_layers=None, spatial_transform_kwargs={},
+                 add_out_act=True, max_features=1024, out_ffc=False, out_ffc_kwargs={}):
+        assert (n_blocks >= 0)
+        super().__init__()
+
+        model = [nn.ReflectionPad2d(3),
+                 FFC_BN_ACT(input_nc, ngf, kernel_size=7, padding=0, norm_layer=norm_layer,
+                            activation_layer=activation_layer, **init_conv_kwargs)]
+
+        ### downsample
+        for i in range(n_downsampling):
+            mult = 2 ** i
+            if i == n_downsampling - 1:
+                cur_conv_kwargs = dict(downsample_conv_kwargs)
+                cur_conv_kwargs['ratio_gout'] = resnet_conv_kwargs.get('ratio_gin', 0)
+            else:
+                cur_conv_kwargs = downsample_conv_kwargs
+            model += [FFC_BN_ACT(min(max_features, ngf * mult),
+                                 min(max_features, ngf * mult * 2),
+                                 kernel_size=3, stride=2, padding=1,
+                                 norm_layer=norm_layer,
+                                 activation_layer=activation_layer,
+                                 **cur_conv_kwargs)]
+
+        mult = 2 ** n_downsampling
+        feats_num_bottleneck = min(max_features, ngf * mult)
+
+        ### resnet blocks
+        for i in range(n_blocks):
+            cur_resblock = TsaOneFFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            model += [cur_resblock]
+
+        model += [ConcatTupleLayer()]
+
+        ### upsample
+        for i in range(n_downsampling):
+            mult = 2 ** (n_downsampling - i)
+            model += [nn.ConvTranspose2d(min(max_features, ngf * mult),
+                                         min(max_features, int(ngf * mult / 2)),
+                                         kernel_size=3, stride=2, padding=1, output_padding=1),
+                      up_norm_layer(min(max_features, int(ngf * mult / 2))),
+                      up_activation]
+
+        if out_ffc:
+            model += [TsaOneFFCResnetBlock(ngf, padding_type=padding_type, activation_layer=activation_layer,
+                                     norm_layer=norm_layer, inline=True, **out_ffc_kwargs)]
+
+        model += [nn.ReflectionPad2d(3),
+                  nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        if add_out_act:
+            model.append(get_activation('tanh' if add_out_act is True else add_out_act))
+        self.model = nn.Sequential(*model)
+
+        self.pa = pa(feat_dim=4)
+
+    def forward(self, input, pa=False):
+        if pa:
+            input = self.pa(input)
+        return self.model(input)
+
+
+class TsaTwoFFCResNetGenerator(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d,
+                 padding_type='reflect', activation_layer=nn.ReLU,
+                 up_norm_layer=nn.BatchNorm2d, up_activation=nn.ReLU(True),
+                 init_conv_kwargs={}, downsample_conv_kwargs={}, resnet_conv_kwargs={},
+                 spatial_transform_layers=None, spatial_transform_kwargs={},
+                 add_out_act=True, max_features=1024, out_ffc=False, out_ffc_kwargs={}):
+        assert (n_blocks >= 0)
+        super().__init__()
+
+        model = [nn.ReflectionPad2d(3),
+                 FFC_BN_ACT(input_nc, ngf, kernel_size=7, padding=0, norm_layer=norm_layer,
+                            activation_layer=activation_layer, **init_conv_kwargs)]
+
+        ### downsample
+        for i in range(n_downsampling):
+            mult = 2 ** i
+            if i == n_downsampling - 1:
+                cur_conv_kwargs = dict(downsample_conv_kwargs)
+                cur_conv_kwargs['ratio_gout'] = resnet_conv_kwargs.get('ratio_gin', 0)
+            else:
+                cur_conv_kwargs = downsample_conv_kwargs
+            model += [FFC_BN_ACT(min(max_features, ngf * mult),
+                                 min(max_features, ngf * mult * 2),
+                                 kernel_size=3, stride=2, padding=1,
+                                 norm_layer=norm_layer,
+                                 activation_layer=activation_layer,
+                                 **cur_conv_kwargs)]
+
+        mult = 2 ** n_downsampling
+        feats_num_bottleneck = min(max_features, ngf * mult)
+
+        ### resnet blocks
+        for i in range(n_blocks):
+            cur_resblock = TsaTwoFFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            model += [cur_resblock]
+
+        model += [ConcatTupleLayer()]
+
+        ### upsample
+        for i in range(n_downsampling):
+            mult = 2 ** (n_downsampling - i)
+            model += [nn.ConvTranspose2d(min(max_features, ngf * mult),
+                                         min(max_features, int(ngf * mult / 2)),
+                                         kernel_size=3, stride=2, padding=1, output_padding=1),
+                      up_norm_layer(min(max_features, int(ngf * mult / 2))),
+                      up_activation]
+
+        if out_ffc:
+            model += [TsaTwoFFCResnetBlock(ngf, padding_type=padding_type, activation_layer=activation_layer,
+                                     norm_layer=norm_layer, inline=True, **out_ffc_kwargs)]
+
+        model += [nn.ReflectionPad2d(3),
+                  nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        if add_out_act:
+            model.append(get_activation('tanh' if add_out_act is True else add_out_act))
+        self.model = nn.Sequential(*model)
+
+        self.pa = pa(feat_dim=4)
+
+    def forward(self, input, pa=False):
+        if pa:
+            input = self.pa(input)
+        return self.model(input)
+
+class TsaFourFFCResNetGenerator(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d,
+                 padding_type='reflect', activation_layer=nn.ReLU,
+                 up_norm_layer=nn.BatchNorm2d, up_activation=nn.ReLU(True),
+                 init_conv_kwargs={}, downsample_conv_kwargs={}, resnet_conv_kwargs={},
+                 spatial_transform_layers=None, spatial_transform_kwargs={},
+                 add_out_act=True, max_features=1024, out_ffc=False, out_ffc_kwargs={}):
+        assert (n_blocks >= 0)
+        super().__init__()
+
+        model = [nn.ReflectionPad2d(3),
+                 FFC_BN_ACT(input_nc, ngf, kernel_size=7, padding=0, norm_layer=norm_layer,
+                            activation_layer=activation_layer, **init_conv_kwargs)]
+
+        ### downsample
+        for i in range(n_downsampling):
+            mult = 2 ** i
+            if i == n_downsampling - 1:
+                cur_conv_kwargs = dict(downsample_conv_kwargs)
+                cur_conv_kwargs['ratio_gout'] = resnet_conv_kwargs.get('ratio_gin', 0)
+            else:
+                cur_conv_kwargs = downsample_conv_kwargs
+            model += [FFC_BN_ACT(min(max_features, ngf * mult),
+                                 min(max_features, ngf * mult * 2),
+                                 kernel_size=3, stride=2, padding=1,
+                                 norm_layer=norm_layer,
+                                 activation_layer=activation_layer,
+                                 **cur_conv_kwargs)]
+
+        mult = 2 ** n_downsampling
+        feats_num_bottleneck = min(max_features, ngf * mult)
+
+        ### resnet blocks
+        for i in range(n_blocks):
+            cur_resblock = TsaFFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            model += [cur_resblock]
+
+        model += [ConcatTupleLayer()]
+
+        ### upsample
+        for i in range(n_downsampling):
+            mult = 2 ** (n_downsampling - i)
+            model += [nn.ConvTranspose2d(min(max_features, ngf * mult),
+                                         min(max_features, int(ngf * mult / 2)),
+                                         kernel_size=3, stride=2, padding=1, output_padding=1),
+                      up_norm_layer(min(max_features, int(ngf * mult / 2))),
+                      up_activation]
+
+        if out_ffc:
+            model += [TsaFFCResnetBlock(ngf, padding_type=padding_type, activation_layer=activation_layer,
+                                     norm_layer=norm_layer, inline=True, **out_ffc_kwargs)]
+
+        model += [nn.ReflectionPad2d(3),
+                  nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        if add_out_act:
+            model.append(get_activation('tanh' if add_out_act is True else add_out_act))
+        self.model = nn.Sequential(*model)
+
+        self.pa = pa(feat_dim=4)
+
+    def forward(self, input, pa=False):
+        if pa:
+            input = self.pa(input)
+        return self.model(input)
+
+
+class SingleFFCResnetBlock(nn.Module):
+    def __init__(self, dim, padding_type, norm_layer, activation_layer=nn.ReLU, dilation=1,
+                 spatial_transform_kwargs=None, inline=False, **conv_kwargs):
+        super().__init__()
+        self.conv1 = FFC_BN_ACT(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
+                                norm_layer=norm_layer,
+                                activation_layer=activation_layer,
+                                padding_type=padding_type,
+                                **conv_kwargs)
+        if spatial_transform_kwargs is not None:
+            self.conv1 = LearnableSpatialTransformWrapper(self.conv1, **spatial_transform_kwargs)
+        
+        self.fuse_weight = torch.nn.Parameter(torch.FloatTensor(1), requires_grad=True)
+        self.fuse_weight.data.fill_(0.001)
+        self.inline = inline
+
+    def forward(self, x):
+        if self.inline:
+            x_l, x_g = x[:, :-self.conv1.ffc.global_in_num], x[:, -self.conv1.ffc.global_in_num:]
+        else:
+            x_l, x_g = x if type(x) is tuple else (x, 0)
+
+        id_l, id_g = x_l, x_g
+
+        x_l, x_g = self.conv1((x_l, x_g))
+        # x_l, x_g = self.conv2((x_l, x_g))
+
+        x_l, x_g = id_l + self.fuse_weight*x_l, id_g + self.fuse_weight*x_g
+        out = x_l, x_g
+        if self.inline:
+            out = torch.cat(out, dim=1)
+        return out
+
+class SimpleFFC(nn.Module):
+
+    def __init__(self, in_channels, out_channels, kernel_size,
+                 ratio_gin, ratio_gout, stride=1, padding=0,
+                 dilation=1, groups=1, bias=False, enable_lfu=True,
+                 norm_layer=nn.BatchNorm2d, activation_layer=nn.Identity,
+                 padding_type='reflect', gated=False, **spectral_kwargs):
+        super(SimpleFFC, self).__init__()
+
+        assert stride == 1 or stride == 2, "Stride should be 1 or 2."
+        self.stride = stride
+
+        in_cg = int(in_channels * ratio_gin)
+        in_cl = in_channels - in_cg
+        out_cg = int(out_channels * ratio_gout)
+        out_cl = out_channels - out_cg
+        #groups_g = 1 if groups == 1 else int(groups * ratio_gout)
+        #groups_l = 1 if groups == 1 else groups - groups_g
+
+        self.ratio_gin = ratio_gin
+        self.ratio_gout = ratio_gout
+        self.global_in_num = in_cg
+
+        module = nn.Identity if in_cl == 0 or out_cl == 0 else nn.Conv2d
+        self.convl2l = module(in_cl, out_cl, kernel_size,
+                              stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        # module = nn.Identity if in_cl == 0 or out_cg == 0 else nn.Conv2d
+        # self.convl2g = module(in_cl, out_cg, kernel_size,
+        #                       stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        # module = nn.Identity if in_cg == 0 or out_cl == 0 else nn.Conv2d
+        # self.convg2l = module(in_cg, out_cl, kernel_size,
+        #                       stride, padding, dilation, groups, bias, padding_mode=padding_type)
+        module = nn.Identity if in_cg == 0 or out_cg == 0 else SpectralTransform
+        self.convg2g = module(
+            in_cg, out_cg, stride, 1 if groups == 1 else groups // 2, enable_lfu, **spectral_kwargs)
+
+        self.gated = gated
+        module = nn.Identity if in_cg == 0 or out_cl == 0 or not self.gated else nn.Conv2d
+        self.gate = module(in_channels, 2, 1)
+
+    def forward(self, x):
+        x_l, x_g = x if type(x) is tuple else (x, 0)
+        out_xl, out_xg = 0, 0
+
+        if self.gated:
+            total_input_parts = [x_l]
+            if torch.is_tensor(x_g):
+                total_input_parts.append(x_g)
+            total_input = torch.cat(total_input_parts, dim=1)
+
+            gates = torch.sigmoid(self.gate(total_input))
+            g2l_gate, l2g_gate = gates.chunk(2, dim=1)
+        else:
+            g2l_gate, l2g_gate = 1, 1
+
+        if self.ratio_gout != 1:
+            out_xl = self.convl2l(x_l)
+        if self.ratio_gout != 0:
+            out_xg = self.convg2g(x_g)
+
+        return out_xl, out_xg
+
+
+class SimpleBlock(nn.Module):
+    def __init__(self, dim, padding_type, norm_layer, activation_layer=nn.ReLU, dilation=1,
+                 spatial_transform_kwargs=None, inline=False, **conv_kwargs):
+        super().__init__()
+        self.conv1 = SimpleFFC(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
+                                norm_layer=norm_layer,
+                                activation_layer=activation_layer,
+                                padding_type=padding_type,
+                                **conv_kwargs)
+        if spatial_transform_kwargs is not None:
+            self.conv1 = LearnableSpatialTransformWrapper(self.conv1, **spatial_transform_kwargs)
+        
+        self.fuse_weight = torch.nn.Parameter(torch.FloatTensor(1), requires_grad=True)
+        self.fuse_weight.data.fill_(0.001)
+        self.inline = inline
+
+    def forward(self, x):
+        if self.inline:
+            x_l, x_g = x[:, :-self.conv1.ffc.global_in_num], x[:, -self.conv1.ffc.global_in_num:]
+        else:
+            x_l, x_g = x if type(x) is tuple else (x, 0)
+
+        id_l, id_g = x_l, x_g
+
+        x_l, x_g = self.conv1((x_l, x_g))
+        # x_l, x_g = self.conv2((x_l, x_g))
+
+        x_l, x_g = id_l + self.fuse_weight*x_l, id_g + self.fuse_weight*x_g
+        out = x_l, x_g
+        if self.inline:
+            out = torch.cat(out, dim=1)
+        return out
+
+
+class FFCResNetFixAddFFCGenerator(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d,
+                 padding_type='reflect', activation_layer=nn.ReLU,
+                 up_norm_layer=nn.BatchNorm2d, up_activation=nn.ReLU(True),
+                 init_conv_kwargs={}, downsample_conv_kwargs={}, resnet_conv_kwargs={},
+                 spatial_transform_layers=None, spatial_transform_kwargs={},
+                 add_out_act=True, max_features=1024, out_ffc=False, out_ffc_kwargs={}):
+        assert (n_blocks >= 0)
+        super().__init__()
+
+        model = [nn.ReflectionPad2d(3),
+                 FFC_BN_ACT(input_nc, ngf, kernel_size=7, padding=0, norm_layer=norm_layer,
+                            activation_layer=activation_layer, **init_conv_kwargs)]
+
+        ### downsample
+        for i in range(n_downsampling):
+            mult = 2 ** i
+            if i == n_downsampling - 1:
+                cur_conv_kwargs = dict(downsample_conv_kwargs)
+                cur_conv_kwargs['ratio_gout'] = resnet_conv_kwargs.get('ratio_gin', 0)
+            else:
+                cur_conv_kwargs = downsample_conv_kwargs
+            model += [FFC_BN_ACT(min(max_features, ngf * mult),
+                                 min(max_features, ngf * mult * 2),
+                                 kernel_size=3, stride=2, padding=1,
+                                 norm_layer=norm_layer,
+                                 activation_layer=activation_layer,
+                                 **cur_conv_kwargs)]
+
+        mult = 2 ** n_downsampling
+        feats_num_bottleneck = min(max_features, ngf * mult)
+
+        ### resnet blocks
+        for i in range(n_blocks):
+            cur_resblock = FFCResnetBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            model += [cur_resblock]
+
+        model += [ConcatTupleLayer()]
+
+        ### upsample
+        for i in range(n_downsampling):
+            mult = 2 ** (n_downsampling - i)
+            model += [nn.ConvTranspose2d(min(max_features, ngf * mult),
+                                         min(max_features, int(ngf * mult / 2)),
+                                         kernel_size=3, stride=2, padding=1, output_padding=1),
+                      up_norm_layer(min(max_features, int(ngf * mult / 2))),
+                      up_activation]
+
+        if out_ffc:
+            model += [FFCResnetBlock(ngf, padding_type=padding_type, activation_layer=activation_layer,
+                                     norm_layer=norm_layer, inline=True, **out_ffc_kwargs)]
+
+        model += [nn.ReflectionPad2d(3),
+                  nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
+        if add_out_act:
+            model.append(get_activation('tanh' if add_out_act is True else add_out_act))
+        self.model = nn.Sequential(*model)
+
+        additional_model = []
+        ### additional resnet blocks
+        for i in range(n_blocks):
+            cur_resblock = SimpleBlock(feats_num_bottleneck, padding_type=padding_type, activation_layer=activation_layer,
+                                          norm_layer=norm_layer, **resnet_conv_kwargs)
+            if spatial_transform_layers is not None and i in spatial_transform_layers:
+                cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
+            additional_model += [cur_resblock]
+        self.additional_model = nn.Sequential(*additional_model)
+
+    def forward(self, input):
+        for block in self.model[:5]:
+            input = block(input)
+        for number, block in enumerate(self.model[5:-13]):
+            input = self.additional_model[number](block(input))
+        for block in self.model[-13:]:
+            input = block(input)
+        
+        return input
+
+
 def calc_mean_var(feat, eps=1e-5):
     # eps is a small value added to the variance to avoid divide-by-zero.
     size = feat.size()

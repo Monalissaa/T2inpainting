@@ -1,7 +1,9 @@
 import logging
 
 from saicinpainting.training.modules.ffc import FFCResNetGenerator, FFCResNetGeneratorSecondStage, FFCResNetGeneratorSpottune, FFCResNetGeneratorSimpleAdd, \
-    FFCResNetGeneratorMaxChangeAdd, FFCResNetGeneratorSmall, FFCResNetGeneratorDropout, FFCResNetFSMRGenerator
+    FFCResNetGeneratorMaxChangeAdd, FFCResNetGeneratorSmall, FFCResNetGeneratorDropout, FFCResNetFSMRGenerator, FFCResNetFixAddFFCGenerator, \
+        TsaFourFFCResNetGenerator, TsaTwoFFCResNetGenerator, TsaOneFFCResNetGenerator, TsaG2GFFCResNetGenerator, TsaG2GL2GFFCResNetGenerator, \
+            TsaG2GL2LFFCResNetGenerator, TsaG2GConvL2LFFCResNetGenerator
 from saicinpainting.training.modules.pix2pixhd import GlobalGenerator, MultiDilatedGlobalGenerator, \
     NLayerDiscriminator, MultidilatedNLayerDiscriminator, WaveNLayerDiscriminator
 
@@ -30,6 +32,22 @@ def make_generator(config, kind, **kwargs):
             return FFCResNetGeneratorDropout(**kwargs)
         elif config.new_params.fsmr.pl>0:
             return FFCResNetFSMRGenerator(**kwargs)
+        elif config.new_params.fix_add_ffc:
+            return FFCResNetFixAddFFCGenerator(**kwargs)
+        elif config.new_params.tsa.four:
+            return TsaFourFFCResNetGenerator(**kwargs)
+        elif config.new_params.tsa.two:
+            return TsaTwoFFCResNetGenerator(**kwargs)
+        elif config.new_params.tsa.one:
+            return TsaOneFFCResNetGenerator(**kwargs) 
+        elif config.new_params.tsa.l2g:
+            return TsaG2GL2GFFCResNetGenerator(**kwargs)
+        elif config.new_params.tsa.l2l:
+            return TsaG2GL2LFFCResNetGenerator(**kwargs)
+        elif config.new_params.tsa.convl2l:
+            return TsaG2GConvL2LFFCResNetGenerator(**kwargs)
+        elif config.new_params.tsa.g2g:
+            return TsaG2GFFCResNetGenerator(**kwargs) 
         else:
             return FFCResNetGenerator(**kwargs)
 

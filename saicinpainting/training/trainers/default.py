@@ -147,6 +147,9 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
             #     batch['predicted_image'] = self.generator(masked_img, use_fsmr=True, fsmr_blocks=self.config.new_params.fsmr.blocks)
 
             batch['inpainted'] = mask * batch['predicted_image'] + (1 - mask) * batch['image']
+        elif self.config.new_params.tsa.pa:
+            batch['predicted_image'] = self.generator(masked_img, pa=True)
+            batch['inpainted'] = mask * batch['predicted_image'] + (1 - mask) * batch['image']
         else:
             batch['predicted_image'] = self.generator(masked_img)
             batch['inpainted'] = mask * batch['predicted_image'] + (1 - mask) * batch['image']

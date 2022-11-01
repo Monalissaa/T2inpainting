@@ -132,6 +132,6 @@ $(pwd)/datasets/${TEST_DATA}/random_thick_256/ \
 $(pwd)/outputs/${PROJECT_NAME}/last_random_thick_256 \
 $(pwd)/outputs/${PROJECT_NAME}/last_random_thick_256_metrics.csv
 
-python3 saicinpainting/evaluation/cal_fid_pids_uids.py \
---output_name $2 \
---kind $4
+# python3 saicinpainting/evaluation/cal_fid_pids_uids.py \
+# --output_name $2 \
+# --kind $4
