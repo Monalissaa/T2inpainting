@@ -386,7 +386,7 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
                 elif self.config.new_params.fix_add_ffc:
                     set_requires_grad(self.generator.additional_model, True)
                 elif self.config.new_params.two_stage_from_init==False and (self.config.new_params.tsa.four or self.config.new_params.tsa.two or self.config.new_params.tsa.one \
-                    or self.config.new_params.tsa.g2g):
+                    or self.config.new_params.tsa.g2g or self.config.new_params.tsa.g2g_down_up):
                     # for name, _ in self.generator.named_parameters():
                     #     if 'alpha' in name:
                     set_requires_grad_freezeD(self.generator, True, target_layer='alpha')

@@ -3,7 +3,7 @@ import logging
 from saicinpainting.training.modules.ffc import FFCResNetGenerator, FFCResNetGeneratorSecondStage, FFCResNetGeneratorSpottune, FFCResNetGeneratorSimpleAdd, \
     FFCResNetGeneratorMaxChangeAdd, FFCResNetGeneratorSmall, FFCResNetGeneratorDropout, FFCResNetFSMRGenerator, FFCResNetFixAddFFCGenerator, \
         TsaFourFFCResNetGenerator, TsaTwoFFCResNetGenerator, TsaOneFFCResNetGenerator, TsaG2GFFCResNetGenerator, TsaG2GL2GFFCResNetGenerator, \
-            TsaG2GL2LFFCResNetGenerator, TsaG2GConvL2LFFCResNetGenerator
+            TsaG2GL2LFFCResNetGenerator, TsaG2GConvL2LFFCResNetGenerator, TsaG2GDownUpFFCResNetGenerator
 from saicinpainting.training.modules.pix2pixhd import GlobalGenerator, MultiDilatedGlobalGenerator, \
     NLayerDiscriminator, MultidilatedNLayerDiscriminator, WaveNLayerDiscriminator
 
@@ -48,6 +48,8 @@ def make_generator(config, kind, **kwargs):
             return TsaG2GConvL2LFFCResNetGenerator(**kwargs)
         elif config.new_params.tsa.g2g:
             return TsaG2GFFCResNetGenerator(**kwargs) 
+        elif config.new_params.tsa.g2g_down_up:
+            return TsaG2GDownUpFFCResNetGenerator(**kwargs)
         else:
             return FFCResNetGenerator(**kwargs)
 

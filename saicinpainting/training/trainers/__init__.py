@@ -142,7 +142,8 @@ def load_checkpoint(train_config, path, map_location='cuda', strict=True):
         elif train_config.new_params.two_stage_from_init:
             model.load_state_dict(state['state_dict'], strict=strict)
         elif train_config.new_params.ewc_onlyUp or train_config.new_params.celeba or train_config.new_params.p_dropout>0 or train_config.new_params.fix_add_ffc \
-            or train_config.new_params.tsa.four or train_config.new_params.tsa.two or train_config.new_params.tsa.one or train_config.new_params.tsa.g2g:
+            or train_config.new_params.tsa.four or train_config.new_params.tsa.two or train_config.new_params.tsa.one or train_config.new_params.tsa.g2g \
+                or train_config.new_params.tsa.g2g_down_up:
             model.load_state_dict(state['state_dict'], strict=False)
             # model.on_load_checkpoint(state)
         

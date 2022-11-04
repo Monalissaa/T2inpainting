@@ -1,4 +1,4 @@
-mv experiments/big-lama-place2_full_config_cat_seed0_wo_fm_tsa_g2g_l2l /mnt/d/post/codes/lama/experiment/
+mv experiments/big-lama-place2_full_config_cat_seed3_wo_fm_tsa_g2g_stage_two_fix_alpha_end_to_end /mnt/d/post/codes/lama/experiment/
 
 # mv experiments/lama-celebahq_full_config_cat_aug_only_release_ten_blocks /mnt/d/post/codes/lama/experiment/
 
