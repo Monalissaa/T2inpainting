@@ -1,5 +1,5 @@
-experiment_name=big-lama-place2_full_config_church_seed1_wo_fm_tsa_g2g_down_up_lr3
-kind=church
+experiment_name=big-lama-place2_full_config_cat_seed0_wo_fm_tsa_g2g_convl2g
+kind=cat
 # create experiments dir
 mkdir experiments/$experiment_name
 
@@ -109,14 +109,14 @@ echo "" >> outputs/$output_name/three_results.txt
 mv experiments/$experiment_name /mnt/d/post/codes/lama/experiment/
 
 # send email to notice
-echo "go go go 714_ch_big_tsa_g2g_down_up_seed1_lr3" | mail -s "714_ch_big_tsa_g2g_down_up_seed1_lr3!" 937315849@qq.com
+echo "go go go 714_cat_big_tsa_g2g_convl2g_seed0" | mail -s "714_cat_big_tsa_g2g_convl2g_seed0!" 937315849@qq.com
 
 
 # # ########################### second
 
 
-experiment_name=big-lama-place2_full_config_cat_seed0_wo_fm_tsa_g2g_down_up_lr3
-kind=church
+experiment_name=big-lama-place2_full_config_cat_seed0_wo_fm_tsa_g2g_middle_all
+kind=cat
 # create experiments dir
 mkdir experiments/$experiment_name
 
@@ -226,7 +226,7 @@ echo "" >> outputs/$output_name/three_results.txt
 mv experiments/$experiment_name /mnt/d/post/codes/lama/experiment/
 
 # send email to notice
-echo "go go go 714_cat_big_tsa_g2g_down_up_seed0_lr3" | mail -s "714_cat_big_tsa_g2g_down_up_seed0_lr3!" 937315849@qq.com
+echo "go go go 714_cat_big_tsa_g2g_middle_all_seed0" | mail -s "714_cat_big_tsa_g2g_middle_all_seed0!" 937315849@qq.com
 
 
 # ########################### third
