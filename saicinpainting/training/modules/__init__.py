@@ -4,7 +4,7 @@ from saicinpainting.training.modules.ffc import FFCResNetGenerator, FFCResNetGen
     FFCResNetGeneratorMaxChangeAdd, FFCResNetGeneratorSmall, FFCResNetGeneratorDropout, FFCResNetFSMRGenerator, FFCResNetFixAddFFCGenerator, \
         TsaFourFFCResNetGenerator, TsaTwoFFCResNetGenerator, TsaOneFFCResNetGenerator, TsaG2GFFCResNetGenerator, TsaG2GL2GFFCResNetGenerator, \
             TsaG2GL2LFFCResNetGenerator, TsaG2GConvL2LFFCResNetGenerator, TsaG2GDownUpFFCResNetGenerator, TsaG2GConvL2GFFCResNetGenerator, \
-                TsaMiddleAllConvFFCResNetGenerator
+                TsaMiddleAllConvFFCResNetGenerator, TsaAllConvFFCResNetGenerator
 from saicinpainting.training.modules.pix2pixhd import GlobalGenerator, MultiDilatedGlobalGenerator, \
     NLayerDiscriminator, MultidilatedNLayerDiscriminator, WaveNLayerDiscriminator
 
@@ -53,6 +53,8 @@ def make_generator(config, kind, **kwargs):
             return TsaG2GConvL2GFFCResNetGenerator(**kwargs)
         elif config.new_params.tsa.middle_all:
             return TsaMiddleAllConvFFCResNetGenerator(**kwargs)
+        elif config.new_params.tsa.all:
+            return TsaAllConvFFCResNetGenerator(**kwargs)
         elif config.new_params.tsa.g2g:
             return TsaG2GFFCResNetGenerator(**kwargs) 
         else:
