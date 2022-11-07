@@ -394,7 +394,7 @@ class TsaMiddleAllGroupFFC(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size,
                  ratio_gin, ratio_gout, stride=1, padding=0,
                  dilation=1, groups=1, bias=False, enable_lfu=True,
-                 padding_type='reflect', gated=False, **spectral_kwargs):
+                 padding_type='reflect', gated=False, group_size=0, **spectral_kwargs):
         super(TsaMiddleAllGroupFFC, self).__init__()
 
         assert stride == 1 or stride == 2, "Stride should be 1 or 2."
@@ -428,17 +428,19 @@ class TsaMiddleAllGroupFFC(nn.Module):
         module = nn.Identity if in_cg == 0 or out_cl == 0 or not self.gated else nn.Conv2d
         self.gate = module(in_channels, 2, 1)
 
+        if group_size>0:
+            groups = group_size
         module = nn.Identity if in_cl == 0 or out_cl == 0 else nn.Conv2d
         self.convl2l_alpha = module(in_cl, out_cl, kernel_size,
-                              stride, padding, dilation, groups=int(in_cl/16), bias=bias, padding_mode=padding_type)
+                              stride, padding, dilation, groups, bias=bias, padding_mode=padding_type)
 
         module = nn.Identity if in_cl == 0 or out_cg == 0 else nn.Conv2d
         self.convl2g_alpha = module(in_cl, out_cg, kernel_size,
-                              stride, padding, dilation, groups=int(in_cl/16), bias=bias, padding_mode=padding_type)
+                              stride, padding, dilation, groups, bias=bias, padding_mode=padding_type)
 
         module = nn.Identity if in_cg == 0 or out_cl == 0 else nn.Conv2d
         self.convg2l_alpha = module(in_cg, out_cl, kernel_size,
-                              stride, padding, dilation, groups=int(in_cg/24), bias=bias, padding_mode=padding_type)
+                              stride, padding, dilation, groups, bias=bias, padding_mode=padding_type)
 
         module = nn.Identity if in_cg == 0 or out_cg == 0 else SpectralTransform
         self.convg2g_alpha = module(
@@ -475,11 +477,12 @@ class TsaMiddleAllGroupFFC_BN_ACT(nn.Module):
                  stride=1, padding=0, dilation=1, groups=1, bias=False,
                  norm_layer=nn.BatchNorm2d, activation_layer=nn.Identity,
                  padding_type='reflect',
-                 enable_lfu=True, **kwargs):
+                 enable_lfu=True, 
+                 group_size=0, **kwargs):
         super(TsaMiddleAllGroupFFC_BN_ACT, self).__init__()
         self.ffc = TsaMiddleAllGroupFFC(in_channels, out_channels, kernel_size,
                                     ratio_gin, ratio_gout, stride, padding, dilation,
-                                    groups, bias, enable_lfu, padding_type=padding_type, **kwargs)
+                                    groups, bias, enable_lfu, padding_type=padding_type, group_size=group_size, **kwargs)
         lnorm = nn.Identity if ratio_gout == 1 else norm_layer
         gnorm = nn.Identity if ratio_gout == 0 else norm_layer
         global_channels = int(out_channels * ratio_gout)
@@ -500,17 +503,19 @@ class TsaMiddleAllGroupFFC_BN_ACT(nn.Module):
 
 class TsaMiddleAllGroupConvFFCResnetBlock(nn.Module):
     def __init__(self, dim, padding_type, norm_layer, activation_layer=nn.ReLU, dilation=1,
-                 spatial_transform_kwargs=None, inline=False, **conv_kwargs):
+                 spatial_transform_kwargs=None, inline=False, group_size=0, **conv_kwargs):
         super().__init__()
         self.conv1 = TsaMiddleAllGroupFFC_BN_ACT(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
                                              norm_layer=norm_layer,
                                              activation_layer=activation_layer,
                                              padding_type=padding_type,
+                                             group_size=group_size,
                                              **conv_kwargs)
         self.conv2 = TsaMiddleAllGroupFFC_BN_ACT(dim, dim, kernel_size=3, padding=dilation, dilation=dilation,
                                              norm_layer=norm_layer,
                                              activation_layer=activation_layer,
                                              padding_type=padding_type,
+                                             group_size=group_size,
                                              **conv_kwargs)
         if spatial_transform_kwargs is not None:
             self.conv1 = LearnableSpatialTransformWrapper(self.conv1, **spatial_transform_kwargs)
@@ -540,7 +545,8 @@ class TsaAllGroupConvFFCResNetGenerator(nn.Module):
                  up_norm_layer=nn.BatchNorm2d, up_activation=nn.ReLU(True),
                  init_conv_kwargs={}, downsample_conv_kwargs={}, resnet_conv_kwargs={},
                  spatial_transform_layers=None, spatial_transform_kwargs={},
-                 add_out_act=True, max_features=1024, out_ffc=False, out_ffc_kwargs={}):
+                 add_out_act=True, max_features=1024, out_ffc=False, out_ffc_kwargs={},
+                 group_size=0):
         assert (n_blocks >= 0)
         super().__init__()
 
@@ -570,7 +576,7 @@ class TsaAllGroupConvFFCResNetGenerator(nn.Module):
         for i in range(n_blocks):
             cur_resblock = TsaMiddleAllGroupConvFFCResnetBlock(feats_num_bottleneck, padding_type=padding_type,
                                                        activation_layer=activation_layer,
-                                                       norm_layer=norm_layer, **resnet_conv_kwargs)
+                                                       norm_layer=norm_layer, group_size=group_size, **resnet_conv_kwargs)
             if spatial_transform_layers is not None and i in spatial_transform_layers:
                 cur_resblock = LearnableSpatialTransformWrapper(cur_resblock, **spatial_transform_kwargs)
             model += [cur_resblock]
@@ -591,7 +597,7 @@ class TsaAllGroupConvFFCResNetGenerator(nn.Module):
 
         if out_ffc:
             model += [TsaMiddleAllGroupConvFFCResnetBlock(ngf, padding_type=padding_type, activation_layer=activation_layer,
-                                                  norm_layer=norm_layer, inline=True, **out_ffc_kwargs)]
+                                                  norm_layer=norm_layer, inline=True, group_size=group_size, **out_ffc_kwargs)]
 
         model += [nn.ReflectionPad2d(3),
                   nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
@@ -602,7 +608,7 @@ class TsaAllGroupConvFFCResNetGenerator(nn.Module):
         self.model_up_alpha = nn.Sequential(*model_up_alpha)
         # self.pa = pa(feat_dim=4)
 
-    def forward(self, input, pa=False):
+    def forward(self, input):
         for block in self.model[:-12]:
             input = block(input)
         up_loc = 0

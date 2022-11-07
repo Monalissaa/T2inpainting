@@ -1,4 +1,4 @@
-experiment_name=big-lama-place2_full_config_cat_seed0_wo_fm_tsa_all
+experiment_name=big-lama-place2_full_config_cat_seed3_wo_fm_tsa_all_group_middle_size2
 kind=cat
 # create experiments dir
 mkdir experiments/$experiment_name
@@ -109,7 +109,7 @@ echo "" >> outputs/$output_name/three_results.txt
 mv experiments/$experiment_name /mnt/d/post/codes/lama/experiment/
 
 # send email to notice
-echo "go go go 714_cat_big_tsa_all_seed0" | mail -s "714_cat_big_tsa_all_seed0!" 937315849@qq.com
+echo "go go go 714_cat_big_tsa_all_group_seed3_size2" | mail -s "714_cat_big_tsa_all_group_seed3_size2!" 937315849@qq.com
 
 
 # # # ########################### second

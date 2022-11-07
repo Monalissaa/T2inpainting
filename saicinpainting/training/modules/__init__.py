@@ -56,6 +56,7 @@ def make_generator(config, kind, **kwargs):
         elif config.new_params.tsa.all:
             return TsaAllConvFFCResNetGenerator(**kwargs)
         elif config.new_params.tsa.all_group:
+            kwargs['group_size'] = config.new_params.tsa.group_size
             return TsaAllGroupConvFFCResNetGenerator(**kwargs)
         elif config.new_params.tsa.g2g:
             return TsaG2GFFCResNetGenerator(**kwargs) 
