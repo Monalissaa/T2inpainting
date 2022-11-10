@@ -145,6 +145,22 @@ def load_checkpoint(train_config, path, map_location='cuda', strict=True):
             or train_config.new_params.tsa.four or train_config.new_params.tsa.two or train_config.new_params.tsa.one or train_config.new_params.tsa.g2g \
                 or train_config.new_params.tsa.g2g_down_up:
             model.load_state_dict(state['state_dict'], strict=False)
+            if train_config.new_params.tsa.init_alpha:
+                for name_alpha,param_alpha in model.generator.model.named_parameters():
+                    if 'alpha' in name_alpha:
+                        name_excpet_alpha = name_alpha.replace('_alpha', '')
+                        for name_origin,param_origin in model.generator.model.named_parameters():
+                            if name_excpet_alpha==name_origin:
+                                param_alpha.data.copy_(param_origin.data)
+                                # print(name_alpha, name_origin)
+                origin_list = [24, 27, 30, 34]
+                for name_alpha,param_alpha in model.generator.model_up_alpha.named_parameters():
+                    name_excpet_alpha = name_alpha.replace(name_alpha[0], str(origin_list[int(name_alpha[0])]))
+                    for name_origin, param_origin in model.generator.model.named_parameters():
+                        if name_excpet_alpha == name_origin:
+                            param_alpha.data.copy_(param_origin.data)
+                            # print(name_alpha, name_origin)
+
             # model.on_load_checkpoint(state)
         
         

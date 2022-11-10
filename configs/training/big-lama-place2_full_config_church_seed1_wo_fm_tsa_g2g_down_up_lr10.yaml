@@ -27,7 +27,7 @@ losses:
 optimizers:
   generator:
     kind: adam
-    lr: 0.003
+    lr: 0.01
   discriminator:
     kind: adam
     lr: 0.0001
@@ -45,8 +45,8 @@ visualizer:
   outdir: samples
 location:
   data_root_dir: ${env:TORCH_HOME}/datasets/church/train256_seed1_100
-  out_root_dir: ${env:TORCH_HOME}/experiments/big-lama-place2_full_config_church_seed1_wo_fm_tsa_g2g_down_up_lr3/
-  tb_dir: ${env:TORCH_HOME}/tb_logs/big-lama-place2_full_config_church_seed1_wo_fm_tsa_g2g_down_up_lr3/
+  out_root_dir: ${env:TORCH_HOME}/experiments/big-lama-place2_full_config_church_seed1_wo_fm_tsa_g2g_down_up_lr10/
+  tb_dir: ${env:TORCH_HOME}/tb_logs/big-lama-place2_full_config_church_seed1_wo_fm_tsa_g2g_down_up_lr10/
 data:
   batch_size: 16
   val_batch_size: 4
