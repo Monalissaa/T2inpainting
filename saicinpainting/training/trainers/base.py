@@ -396,6 +396,9 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
                         set_requires_grad_freezeD(self.generator, True, target_layer='convg2g')
                         for loc in [25,28,31]:
                             set_requires_grad_freezeD(self.generator, True, target_layer=f'model.{loc}.')
+                    elif self.config.new_params.tsa.release_tsa_global:
+                        set_requires_grad_freezeD(self.generator, True, target_layer='convl2g')
+                        set_requires_grad_freezeD(self.generator, True, target_layer='convg2g')
                     # ----------- next ---------------
                     if self.config.new_params.tsa.end_to_end:
                         if self.current_epoch>=(self.config.trainer.kwargs.max_epochs/2):
