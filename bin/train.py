@@ -71,6 +71,8 @@ def main(config: OmegaConf):
             checkpoint_path = config.new_params.from_cwd_path
         elif config.new_params.celeba:
             checkpoint_path = os.environ.get('TORCH_HOME')+'/experiments/lama-fourier/models/best.ckpt'
+        elif config.new_params.tsa.from_our1_path != False:
+            checkpoint_path = config.new_params.tsa.from_our1_path
         else:
             checkpoint_path = os.environ.get('TORCH_HOME')+'/experiments/big-lama-with-discr/models/best.ckpt'
 
