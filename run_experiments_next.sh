@@ -1,5 +1,5 @@
-experiment_name=big-lama-place2_full_config_wild_seed3_wo_fm_tsa_all
-kind=wild
+experiment_name=big-lama-place2_full_config_church_seed1_aug_fix_cl2l_cg2l_UD_wo_fm_stage_two_aug_tsa_all
+kind=church
 # create experiments dir
 mkdir experiments/$experiment_name
 
@@ -109,7 +109,7 @@ echo "" >> outputs/$output_name/three_results.txt
 mv experiments/$experiment_name /mnt/d/post/codes/lama/experiment/
 
 # send email to notice
-echo "go go go 714_wild_seed3_big_lama" | mail -s "714_wild_seed3_big_lama!" 937315849@qq.com
+echo "go go go 714_church100_seed1_big_lama_our2_combine" | mail -s "714_cat100_seed1_lama_our2_combine!" 937315849@qq.com
 
 
 # ########################### second

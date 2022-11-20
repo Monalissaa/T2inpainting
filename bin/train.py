@@ -67,12 +67,12 @@ def main(config: OmegaConf):
         # checkpoint_path = '/home/mona/codes/lama/experiments/big-lama-transfer-reInitUp/10-36-13/models/best.ckpt'
         if config.new_params.two_stage_from_init:
             checkpoint_path = config.new_params.resume_from_checkpoint
+        elif config.new_params.tsa.from_our1_path != False:
+            checkpoint_path = config.new_params.tsa.from_our1_path
         elif config.new_params.from_cwd:
             checkpoint_path = config.new_params.from_cwd_path
         elif config.new_params.celeba:
             checkpoint_path = os.environ.get('TORCH_HOME')+'/experiments/lama-fourier/models/best.ckpt'
-        elif config.new_params.tsa.from_our1_path != False:
-            checkpoint_path = config.new_params.tsa.from_our1_path
         else:
             checkpoint_path = os.environ.get('TORCH_HOME')+'/experiments/big-lama-with-discr/models/best.ckpt'
 
