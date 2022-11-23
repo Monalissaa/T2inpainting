@@ -14,7 +14,7 @@ then
     TEST_DATA=church/test-2000-source-seed1002-256-with-mask
 elif [[ "$4" = "CLEVR" ]]
 then
-    TEST_DATA=datasets/CLEVR/test256-2000-source-seed1002-with-mask
+    TEST_DATA=CLEVR/test256-2000-source-seed1002-with-mask
 else
     TEST_DATA=afhq/test/test_256_with_mask/$4
 fi
