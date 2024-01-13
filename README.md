@@ -1,7 +1,7 @@
 # Environment setup
 
 Clone the repo:
-`git clone https://github.com/saic-mdal/lama.git`
+`git clone https://github.com/Monalissaa/T2inpainting.git`
 
 There are three options of an environment:
 
