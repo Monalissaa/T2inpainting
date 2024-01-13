@@ -158,6 +158,9 @@ datasets/generate_train_val.py
 
 fetch_data/celebahq_gen_masks.sh
 
+datasets/avg_spectra_dog/
+datasets/png_to_jpg.sh
+
 
 # experiments
 experiments/
