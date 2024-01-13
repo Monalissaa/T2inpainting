@@ -181,3 +181,35 @@ new_params:
     feats_add_both: false
     only_pl_loss: false
   only_pl_loss: false
+  weight_decay_only_conv_weight_lambda: 0
+  fix_add_ffc: false
+  only_bn: false
+  only_global_bn: false
+  only_g2g_bn: false
+  tsa:
+    pa: false
+    four: false
+    two: false
+    first_block: false
+    one: false
+    g2g: false
+    l2g: false
+    l2l: false
+    convl2l: false
+    last_block: false
+    UpDown_blocks: false
+    fix_alpha: false
+    end_to_end: false
+    g2g_down_up: false
+    convl2g: false
+    middle_all: false
+    all: false
+    all_group: false
+    group_size: 0
+    release_tsa_global_bn: false
+    release_tsa_global: false
+    init_alpha: false
+    from_our1_path: false
+    one_conv: false
+    tsa_alpha: 0
+  freezeD: 0

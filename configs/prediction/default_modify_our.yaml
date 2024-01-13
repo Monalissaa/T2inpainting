@@ -1,9 +1,9 @@
 indir: ${env:TORCH_HOME}/datasets/afhq/test/test_256_with_mask/cat/random_thick_256  # to be overriden in CLI
-outdir: ${env:TORCH_HOME}/outputs/our/inner_features_our  # to be overriden in CLI
+outdir: ${env:TORCH_HOME}/outputs/feature_visualization/cat_all_data_best_combine  # to be overriden in CLI
 
 model:
-  path: ${env:TORCH_HOME}/experiments/lama-celebahq_full_config_cat_random_seed2_aug_fix_m_cl2l_cg2l_fix_UD_wo_fm_stage_two_aug_no_fix_wo_fm_50val/22-27-06  # to be overriden in CLI
-  checkpoint: model1.ckpt
+  path: /mnt/d/post/codes/lama/experiment/big-lama-place2_full_config_cat_data_allx3_seed0_flip_fix_cl2l_cg2l_ud_wo_fm_stage_two_tsa_all/18-15-12  # to be overriden in CLI
+  checkpoint: cat_all_best_combine.ckpt
 
 dataset:
   kind: default
@@ -13,6 +13,6 @@ dataset:
 device: cuda
 out_key: inpainted
 #levels: [5,6,8,10,12]
-levels: [5,6,7,8,9,10,11,12,13]
+levels: [21, 22]
 hole_radius: 60
 slice_channels: false

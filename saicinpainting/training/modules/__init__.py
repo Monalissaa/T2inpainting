@@ -4,7 +4,8 @@ from saicinpainting.training.modules.ffc import FFCResNetGenerator, FFCResNetGen
     FFCResNetGeneratorMaxChangeAdd, FFCResNetGeneratorSmall, FFCResNetGeneratorDropout, FFCResNetFSMRGenerator, FFCResNetFixAddFFCGenerator, \
         TsaFourFFCResNetGenerator, TsaTwoFFCResNetGenerator, TsaOneFFCResNetGenerator, TsaG2GFFCResNetGenerator, TsaG2GL2GFFCResNetGenerator, \
             TsaG2GL2LFFCResNetGenerator, TsaG2GConvL2LFFCResNetGenerator, TsaG2GDownUpFFCResNetGenerator, TsaG2GConvL2GFFCResNetGenerator, \
-                TsaMiddleAllConvFFCResNetGenerator, TsaAllConvFFCResNetGenerator, TsaAllGroupConvFFCResNetGenerator, TsaAllConvL2LG2LFFCResNetGenerator
+                TsaMiddleAllConvFFCResNetGenerator, TsaAllConvFFCResNetGenerator, TsaAllGroupConvFFCResNetGenerator, TsaAllConvL2LG2LFFCResNetGenerator, \
+                    TsaAllConvConvFFCResNetGenerator
 from saicinpainting.training.modules.pix2pixhd import GlobalGenerator, MultiDilatedGlobalGenerator, \
     NLayerDiscriminator, MultidilatedNLayerDiscriminator, WaveNLayerDiscriminator
 
@@ -35,6 +36,8 @@ def make_generator(config, kind, **kwargs):
             return FFCResNetFSMRGenerator(**kwargs)
         elif config.new_params.fix_add_ffc:
             return FFCResNetFixAddFFCGenerator(**kwargs)
+        elif config.new_params.tsa.one_conv:
+            return TsaAllConvConvFFCResNetGenerator(**kwargs)
         elif config.new_params.tsa.four:
             return TsaFourFFCResNetGenerator(**kwargs)
         elif config.new_params.tsa.two:
@@ -54,7 +57,11 @@ def make_generator(config, kind, **kwargs):
         elif config.new_params.tsa.middle_all:
             return TsaMiddleAllConvFFCResNetGenerator(**kwargs)
         elif config.new_params.tsa.all:
-            return TsaAllConvFFCResNetGenerator(**kwargs)
+            if 'tsa_alpha' in config.new_params.tsa:
+                # print('True???????????????????????????')
+                return TsaAllConvFFCResNetGenerator(tsa_alpha=config.new_params.tsa.tsa_alpha, **kwargs)
+            else:
+                return TsaAllConvFFCResNetGenerator(**kwargs)
         elif config.new_params.tsa.all_group:
             kwargs['group_size'] = config.new_params.tsa.group_size
             return TsaAllGroupConvFFCResNetGenerator(**kwargs)

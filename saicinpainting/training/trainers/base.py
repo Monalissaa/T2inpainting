@@ -482,6 +482,7 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
                 #     exit(0)
             elif optimizer_idx == 1:  # step for discriminator
                 set_requires_grad(self.generator, False)
+                
                 if self.config.new_params.spottune:
                         set_requires_grad(self.agent, False)
 
@@ -492,8 +493,12 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
                 if self.config.new_params.wave_dis:
                     set_requires_grad_freezeD(self.wave_discriminator, True, target_layer=f'model')
             
-                
-                
+                if self.config.new_params.freezeD>0:
+                    for loc in range(int(self.config.new_params.freezeD)):
+                        set_requires_grad_freezeD(self.discriminator, False, target_layer=f'model{loc}.')
+                # for name, param in self.discriminator.named_parameters():
+                #     print(name + '_requires_grad: ' + str(param.requires_grad))
+                # exit(0)
                 # set_requires_grad(self.wave_discriminator.model, True)
                 # set_requires_grad_freezeD(self.wave_discriminator, True, target_layer=f'model')
                 # print wave_discriminator --> check whether wavepool is require grad or not
@@ -505,6 +510,27 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
                 # for name, param in self.wave_discriminator.named_parameters():
                 #     print(name + '_requires_grad: ' + str(param.requires_grad))
                 # exit(0)
+
+                # model0.0.weight
+                # model0.0.bias
+                # model1.0.weight
+                # model1.0.bias
+                # model1.1.weight
+                # model1.1.bias
+                # model2.0.weight
+                # model2.0.bias
+                # model2.1.weight
+                # model2.1.bias
+                # model3.0.weight
+                # model3.0.bias
+                # model3.1.weight
+                # model3.1.bias
+                # model4.0.weight
+                # model4.0.bias
+                # model4.1.weight
+                # model4.1.bias
+                # model5.0.weight
+                # model5.0.bias
 
 
         batch = self(batch, optimizer_idx)

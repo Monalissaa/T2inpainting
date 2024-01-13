@@ -1,5 +1,6 @@
-experiment_name=lama-celebahq_full_config_wild_random_seed3_aug_fix_m_cl2l_cg2l_fix_UD_wo_fm_loss_stage_two_aug_tsa_all
-kind=wild
+# # # #################### second
+experiment_name=lama-celebahq_full_config_dog_random_seed0_aug_fix_m_cl2l_cg2l_fix_UD_wo_fm_loss_stage_two_aug_tsa_all_tsa_alpha05_20240111
+kind=dog
 # create experiments dir
 mkdir experiments/$experiment_name
 
@@ -12,7 +13,7 @@ mkdir outputs/$experiment_name
 # look for the true experiment dir in outputs
 path='outputs'
 files=$(ls $path)
-first_level_need_contain='2022'
+first_level_need_contain='2024'
 first_level_name=''
 for filename in $files
 do
@@ -34,14 +35,15 @@ done
 
 experiment_dir_in_outputs=outputs/$first_level_name/$second_level_name
 
-
+rm -rf $experiment_dir_in_outputs/samples
 
 # mv experiment in outputs to experiments dir
 mv $experiment_dir_in_outputs experiments/$experiment_name/
-
+# second_level_name=10-52-09
 # run predict & metric
 bash outputs/predict\&metric_template.sh $PWD/experiments/$experiment_name/$second_level_name/models $experiment_name $second_level_name $kind
 #
+
 
 output_name=$experiment_name
 
@@ -109,10 +111,126 @@ echo "" >> outputs/$output_name/three_results.txt
 mv experiments/$experiment_name /mnt/d/post/codes/lama/experiment/
 
 # send email to notice
-echo "go go go 714_wild100_seed3_lama_combine" | mail -s "714_wild100_seed3_lama_combine!" 937315849@qq.com
+echo "go go go 714_dog100_lama_dog_alpha05" | mail -s "714_dog100_lama_dog_alpha05!" 937315849@qq.com
 
 
-# ########################### second
+# # #################### second
+# # #################### second
+# experiment_name=lama-celebahq_full_config_dog_random_seed0_aug_fix_m_cl2l_cg2l_fix_UD_wo_fm_loss_stage_two_aug_tsa_all_tsa_alpha5_20240111
+# kind=dog
+# # # create experiments dir
+# # mkdir experiments/$experiment_name
+
+# # # run experiment
+# # python3 bin/train.py -cn $experiment_name
+
+# # # create outputs dir
+# # mkdir outputs/$experiment_name
+
+# # # look for the true experiment dir in outputs
+# # path='outputs'
+# # files=$(ls $path)
+# # first_level_need_contain='2024'
+# # first_level_name=''
+# # for filename in $files
+# # do
+# #    if [[ $filename == *$first_level_need_contain* ]]
+# #    then
+# #      first_level_name=$filename
+# #    else
+# #      break
+# #    fi
+# # done
+
+# # path_second_level=outputs/$first_level_name
+# # files=$(ls $path_second_level)
+# # second_level_name=''
+# # for filename in $files
+# # do
+# #    second_level_name=$filename
+# # done
+
+# # experiment_dir_in_outputs=outputs/$first_level_name/$second_level_name
+
+# # rm -rf $experiment_dir_in_outputs/samples
+
+# # # mv experiment in outputs to experiments dir
+# # mv $experiment_dir_in_outputs experiments/$experiment_name/
+# second_level_name=04-32-15
+# # run predict & metric
+# bash outputs/predict\&metric_template.sh $PWD/experiments/$experiment_name/$second_level_name/models $experiment_name $second_level_name $kind
+# # #
 
 
-bash run_experiments_next.sh
+# output_name=$experiment_name
+
+# echo "---------------------thin_mask_results--------------------" >> outputs/$output_name/three_results.txt
+# cat outputs/$output_name/last_random_thin_256_metrics.csv >> outputs/$output_name/three_results.txt
+# cat outputs/$output_name/last_thin_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+# echo "" >> outputs/$output_name/three_results.txt
+# echo "" >> outputs/$output_name/three_results.txt
+
+
+# cat outputs/$output_name/model0_random_thin_256_metrics.csv >> outputs/$output_name/three_results.txt
+# cat outputs/$output_name/model0_thin_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+# echo "" >> outputs/$output_name/three_results.txt
+# echo "" >> outputs/$output_name/three_results.txt
+
+
+# cat outputs/$output_name/model1_random_thin_256_metrics.csv >> outputs/$output_name/three_results.txt
+# cat outputs/$output_name/model1_thin_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+# echo "" >> outputs/$output_name/three_results.txt
+# echo "" >> outputs/$output_name/three_results.txt
+
+
+# echo "" >> outputs/$output_name/three_results.txt
+# echo "" >> outputs/$output_name/three_results.txt
+
+# echo "---------------------medium_mask_results--------------------" >> outputs/$output_name/three_results.txt
+# cat outputs/$output_name/last_random_medium_256_metrics.csv >> outputs/$output_name/three_results.txt
+# cat outputs/$output_name/last_medium_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+# echo "" >> outputs/$output_name/three_results.txt
+# echo "" >> outputs/$output_name/three_results.txt
+
+
+# cat outputs/$output_name/model0_random_medium_256_metrics.csv >> outputs/$output_name/three_results.txt
+# cat outputs/$output_name/model0_medium_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+# echo "" >> outputs/$output_name/three_results.txt
+# echo "" >> outputs/$output_name/three_results.txt
+
+
+# cat outputs/$output_name/model1_random_medium_256_metrics.csv >> outputs/$output_name/three_results.txt
+# cat outputs/$output_name/model1_medium_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+# echo "" >> outputs/$output_name/three_results.txt
+# echo "" >> outputs/$output_name/three_results.txt
+
+
+# echo "" >> outputs/$output_name/three_results.txt
+# echo "" >> outputs/$output_name/three_results.txt
+
+# echo "---------------------thick_mask_results--------------------" >> outputs/$output_name/three_results.txt
+# cat outputs/$output_name/last_random_thick_256_metrics.csv >> outputs/$output_name/three_results.txt
+# cat outputs/$output_name/last_thick_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+# echo "" >> outputs/$output_name/three_results.txt
+# echo "" >> outputs/$output_name/three_results.txt
+
+
+# cat outputs/$output_name/model0_random_thick_256_metrics.csv >> outputs/$output_name/three_results.txt
+# cat outputs/$output_name/model0_thick_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+# echo "" >> outputs/$output_name/three_results.txt
+# echo "" >> outputs/$output_name/three_results.txt
+
+
+# cat outputs/$output_name/model1_random_thick_256_metrics.csv >> outputs/$output_name/three_results.txt
+# cat outputs/$output_name/model1_thick_fid_pids_uids.txt >> outputs/$output_name/three_results.txt
+# echo "" >> outputs/$output_name/three_results.txt
+
+# mv experiments/$experiment_name /mnt/d/post/codes/lama/experiment/
+
+# # send email to notice
+# echo "go go go 714_dog100_lama_dog_alpha5" | mail -s "714_dog100_lama_dog_alpha5!" 937315849@qq.com
+
+
+
+
+# bash run_experiments_next.sh

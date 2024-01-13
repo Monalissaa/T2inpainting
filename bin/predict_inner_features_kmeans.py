@@ -94,10 +94,13 @@ def main(predict_config: OmegaConf):
                         # else:
                         #     cur_feats = torch.cat([f for f in feats if torch.is_tensor(f)], dim=1) \
                         #         if isinstance(feats, tuple) else feats
-
-                        cur_feats = torch.cat([f for f in feats if torch.is_tensor(f)], dim=1) \
-                            if isinstance(feats, tuple) else feats
+                        # all
+                        # cur_feats = torch.cat([f for f in feats if torch.is_tensor(f)], dim=1) \
+                        #     if isinstance(feats, tuple) else feats
+                        # global
                         # cur_feats = feats[1]
+                        # local
+                        cur_feats = feats[0]
                         cur_feats = get_cluster_vis(cur_feats, num_clusters=6,
                                               target_res=cur_feats.shape[-1])
                         vis_img.append(cur_feats)
@@ -132,9 +135,10 @@ def main(predict_config: OmegaConf):
 
                 vis_img = torch.cat(vis_img, dim=0)  # bnum * res_num, 256, 256
                 vis_img = (vis_img + 1) * 127.5 / 255.0
-                vis_img = torchvision.utils.make_grid(vis_img, normalize=False, nrow=1)
-                torchvision.utils.save_image(vis_img, f'{cur_out_fname}.png')
-                if img_i>5:
+                vis_img = torchvision.utils.make_grid(vis_img, normalize=False, nrow=9)
+                # torchvision.utils.save_image(vis_img, f'{cur_out_fname}_combine_local.svg')
+                torchvision.utils.save_image(vis_img, f'{cur_out_fname}_combine_local.eps')
+                if img_i>10:
                     break
                 # for res in target_layers:
                 #     img = get_cluster_vis(fake_feat[res], num_clusters=num_clusters,
